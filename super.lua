@@ -1,4 +1,4 @@
--- Delta Executor: Dragon Nova Hub v18.3 (Fast Speed & 25 Studs Max Range)
+-- Delta Executor: Dragon Nova Hub v18.3
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -15,6 +15,7 @@ local autoSteal = false
 local antiStun = false
 local autoEggActive = false
 local hitboxActive = false
+local antiTrapActive = false
 
 local speedVal = 220
 local chunkVal = 18
@@ -53,7 +54,7 @@ local function bypassPrompt(prompt)
     if prompt and prompt:IsA("ProximityPrompt") then
         prompt.HoldDuration = 0
         prompt.RequiresLineOfSight = false
-        prompt.MaxActivationDistance = 25 -- Giới hạn tầm nhận/hiển thị prompt 25 studs
+        prompt.MaxActivationDistance = 25
     end
 end
 
@@ -78,12 +79,11 @@ local function triggerPrompt(prompt)
     else
         pcall(function()
             prompt:InputHoldBegin()
-            prompt:InputHoldEnd() -- Kích hoạt tức thì 0 delay
+            prompt:InputHoldEnd()
         end)
     end
 end
 
--- Kích hoạt TỨC THÌ ngay khi Prompt hiển thị (trong khoảng 25 studs)
 ProximityPromptService.PromptShown:Connect(function(prompt)
     bypassPrompt(prompt)
     shownPrompts[prompt] = true
@@ -103,10 +103,9 @@ workspace.DescendantAdded:Connect(function(descendant)
     end
 end)
 
--- Vòng lặp quét kiểm tra tầm xa <= 25 studs
 task.spawn(function()
     while true do
-        task.wait() -- Chạy theo từng frame (tốc độ cao nhất)
+        task.wait()
         if not autoEggActive and not autoSteal then continue end
 
         pcall(function()
@@ -117,7 +116,7 @@ task.spawn(function()
 
             if autoEggActive then
                 local closestPrompt = nil
-                local minDist = 25 -- Giới hạn tối đa 25 studs
+                local minDist = 25
 
                 for prompt, _ in pairs(shownPrompts) do
                     if prompt and prompt.Enabled and prompt.Parent and prompt:IsDescendantOf(workspace:FindFirstChild("AreaEggSlotsClient") or workspace) then
@@ -290,7 +289,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- 5. HITBOX 5 STUDS
+-- 5. HITBOX EXPANDER (ĐÃ FIX KHÔNG BỊ TRÔI & RESET SẠCH)
 -- =================================================================
 local function resetHitboxes()
     pcall(function()
@@ -300,6 +299,8 @@ local function resetHitboxes()
                 if hrp then
                     hrp.Size = Vector3.new(2, 2, 1)
                     hrp.Transparency = 1
+                    hrp.Material = Enum.Material.Plastic
+                    hrp.CanCollide = false
                 end
             end
         end
@@ -308,14 +309,14 @@ end
 
 task.spawn(function()
     while true do
-        task.wait(1)
+        task.wait(0.3)
         if hitboxActive then
             pcall(function()
                 for _, player in ipairs(Players:GetPlayers()) do
                     if player ~= LocalPlayer and player.Character then
                         local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp and hrp.Size ~= Vector3.new(5, 5, 5) then
-                            hrp.Size = Vector3.new(5, 5, 5)
+                        if hrp then
+                            hrp.Size = Vector3.new(15, 15, 15)
                             hrp.Transparency = 0.7
                             hrp.BrickColor = BrickColor.new("Really red")
                             hrp.Material = Enum.Material.Neon
@@ -329,7 +330,106 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- 6. GIAO DIỆN DRAGON NOVA HUB
+-- 6. ANTI TRAP & TRAP ESP (workspace.__DEBRIS.PlayerTrap.Hitbox)
+-- =================================================================
+local trapESP = {}
+
+local function getTrapFolder()
+    local debris = workspace:FindFirstChild("__DEBRIS")
+    if not debris then return nil end
+    local playerTrap = debris:FindFirstChild("PlayerTrap")
+    if not playerTrap then return nil end
+    return playerTrap:FindFirstChild("Hitbox")
+end
+
+local function createTrapESP(part)
+    if not antiTrapActive then return end
+    if not part or not part:IsA("BasePart") then return end
+    if trapESP[part] then return end
+
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "DragonNova_TrapESP"
+    highlight.Adornee = part
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillTransparency = 0.6
+    highlight.OutlineTransparency = 0
+    highlight.FillColor = Color3.fromRGB(255, 50, 50)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.Parent = part
+
+    trapESP[part] = highlight
+end
+
+local function removeTrapESP()
+    for part, highlight in pairs(trapESP) do
+        pcall(function()
+            if highlight then highlight:Destroy() end
+        end)
+        trapESP[part] = nil
+    end
+end
+
+local function disableTrap(part)
+    if not part or not part:IsA("BasePart") then return end
+
+    pcall(function()
+        part.CanCollide = false
+        part.CanTouch = false
+        part.CanQuery = false
+
+        for _, child in ipairs(part:GetChildren()) do
+            if child:IsA("TouchTransmitter") or child.ClassName == "TouchInterest" then
+                child:Destroy()
+            end
+        end
+
+        if antiTrapActive then
+            createTrapESP(part)
+        end
+    end)
+end
+
+local function scanTraps()
+    local folder = getTrapFolder()
+    if not folder then return end
+
+    for _, obj in ipairs(folder:GetDescendants()) do
+        if obj:IsA("BasePart") then
+            disableTrap(obj)
+        end
+    end
+end
+
+local function setAntiTrap(state)
+    antiTrapActive = state
+    if state then
+        scanTraps()
+    else
+        removeTrapESP()
+    end
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+        if antiTrapActive then
+            pcall(scanTraps)
+        end
+    end
+end)
+
+workspace.DescendantAdded:Connect(function(obj)
+    if not antiTrapActive then return end
+    pcall(function()
+        local folder = getTrapFolder()
+        if folder and obj:IsDescendantOf(folder) and obj:IsA("BasePart") then
+            disableTrap(obj)
+        end
+    end)
+end)
+
+-- =================================================================
+-- 7. GIAO DIỆN DRAGON NOVA HUB
 -- =================================================================
 local function createHubUI()
     local oldGui = CoreGui:FindFirstChild("DragonNovaHub") or (LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild("DragonNovaHub"))
@@ -343,7 +443,7 @@ local function createHubUI()
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
     mainFrame.Parent = screenGui
-    mainFrame.Size = UDim2.new(0, 240, 0, 265)
+    mainFrame.Size = UDim2.new(0, 240, 0, 260)
     mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
     mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
     mainFrame.Active = true
@@ -503,12 +603,16 @@ local function createHubUI()
         return autoEggActive
     end)
 
-    createGridButton(0.05, 210, 0.90, "🎯 Hitbox", hitboxActive, function()
+    createGridButton(0.05, 210, 0.45, "🎯 Hitbox", hitboxActive, function()
         hitboxActive = not hitboxActive
         if not hitboxActive then resetHitboxes() end
         return hitboxActive
     end)
+
+    createGridButton(0.50, 210, 0.45, "🪤 Anti Trap", antiTrapActive, function()
+        setAntiTrap(not antiTrapActive)
+        return antiTrapActive
+    end)
 end
 
 createHubUI()
-print("[SYSTEM] 🐉 Dragon Nova Hub v18.3 (25 Studs Range) Loaded!")
