@@ -1,4 +1,4 @@
--- Delta Executor: Dragon Nova Hub v18.3
+-- Delta Executor: Dragon Nova Hub v18.3 (Full Anti Trap Fix)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -289,7 +289,7 @@ RunService.RenderStepped:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- 5. HITBOX EXPANDER (ĐÃ FIX KHÔNG BỊ TRÔI & RESET SẠCH)
+-- 5. HITBOX EXPANDER
 -- =================================================================
 local function resetHitboxes()
     pcall(function()
@@ -330,17 +330,9 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- 6. ANTI TRAP & TRAP ESP (workspace.__DEBRIS.PlayerTrap.Hitbox)
+-- 6. ANTI TRAP (QUÉT TOÀN BỘ workspace.__DEBRIS.PlayerTrap)
 -- =================================================================
 local trapESP = {}
-
-local function getTrapFolder()
-    local debris = workspace:FindFirstChild("__DEBRIS")
-    if not debris then return nil end
-    local playerTrap = debris:FindFirstChild("PlayerTrap")
-    if not playerTrap then return nil end
-    return playerTrap:FindFirstChild("Hitbox")
-end
 
 local function createTrapESP(part)
     if not antiTrapActive then return end
@@ -369,15 +361,22 @@ local function removeTrapESP()
     end
 end
 
-local function disableTrap(part)
+local function disableTrapPart(part)
     if not part or not part:IsA("BasePart") then return end
 
     pcall(function()
-        part.CanCollide = false
+        -- Tắt va chạm và khả năng kích hoạt
         part.CanTouch = false
+        part.CanCollide = false
         part.CanQuery = false
 
-        for _, child in ipairs(part:GetChildren()) do
+        -- Thu nhỏ riêng đối với Hitbox
+        if string.lower(part.Name) == "hitbox" or (part.Parent and string.lower(part.Parent.Name) == "hitbox") then
+            part.Size = Vector3.new(0.001, 0.001, 0.001)
+        end
+
+        -- Xóa toàn bộ TouchInterest / TouchTransmitter
+        for _, child in ipairs(part:GetDescendants()) do
             if child:IsA("TouchTransmitter") or child.ClassName == "TouchInterest" then
                 child:Destroy()
             end
@@ -390,12 +389,15 @@ local function disableTrap(part)
 end
 
 local function scanTraps()
-    local folder = getTrapFolder()
-    if not folder then return end
+    local debris = workspace:FindFirstChild("__DEBRIS")
+    if not debris then return end
+    
+    local playerTrap = debris:FindFirstChild("PlayerTrap")
+    if not playerTrap then return end
 
-    for _, obj in ipairs(folder:GetDescendants()) do
+    for _, obj in ipairs(playerTrap:GetDescendants()) do
         if obj:IsA("BasePart") then
-            disableTrap(obj)
+            disableTrapPart(obj)
         end
     end
 end
@@ -409,21 +411,26 @@ local function setAntiTrap(state)
     end
 end
 
+-- Vòng lặp quét liên tục
 task.spawn(function()
     while true do
-        task.wait(0.2)
+        task.wait(0.1)
         if antiTrapActive then
             pcall(scanTraps)
         end
     end
 end)
 
+-- Bắt sự kiện khi trap mới xuất hiện
 workspace.DescendantAdded:Connect(function(obj)
     if not antiTrapActive then return end
     pcall(function()
-        local folder = getTrapFolder()
-        if folder and obj:IsDescendantOf(folder) and obj:IsA("BasePart") then
-            disableTrap(obj)
+        local debris = workspace:FindFirstChild("__DEBRIS")
+        if debris then
+            local playerTrap = debris:FindFirstChild("PlayerTrap")
+            if playerTrap and obj:IsDescendantOf(playerTrap) and obj:IsA("BasePart") then
+                disableTrapPart(obj)
+            end
         end
     end)
 end)
