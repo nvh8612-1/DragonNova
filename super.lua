@@ -1,315 +1,1207 @@
---[[
-    🔥 DELTA TROLL LOCK
-    =========================
-    🔒 Khóa di chuyển
-    📷 Khóa xoay camera
-    🚫 Khóa input
-    😂 Spam icon vĩnh viễn
-    🚨 Chuông báo cháy
-]]
+-- Delta Executor: Dragon Nova Hub v18.3
+-- Giữ nguyên chức năng gốc
+-- ĐÃ BỎ: Guard Avoid + SakuraTrees
 
 local Players = game:GetService("Players")
-local ContextActionService = game:GetService("ContextActionService")
 local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local CoreGui = game:GetService("CoreGui")
+local LocalPlayer = Players.LocalPlayer
 
-local Player = Players.LocalPlayer
-local PlayerGui = Player:WaitForChild("PlayerGui")
+-- =================================================================
+-- 1. CẤU HÌNH TRẠNG THÁI DRAGON NOVA HUB
+-- =================================================================
 
--- ==========================================
--- CONFIG
--- ==========================================
+local teleguiadoActive = false
+local autoSteal = false
+local antiStun = false
+local autoEggActive = false
+local hitboxActive = false
+local antiTrapActive = false
 
-local ICON_DELAY = 0.12
-local ALARM_VOLUME = 2
+local speedVal = 220
+local chunkVal = 18
+local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
 
--- ==========================================
--- XÓA GUI CŨ
--- ==========================================
+local currentTween = nil
+local stepCounter = 0
+local phaseTimer = 0
+local isStraightPhase = false
 
-local OldGUI = PlayerGui:FindFirstChild("TrollLockGUI")
+local updateTeleguiadoUI = function() end
 
-if OldGUI then
-    OldGUI:Destroy()
-end
-
--- ==========================================
--- GUI
--- ==========================================
-
-local GUI = Instance.new("ScreenGui")
-GUI.Name = "TrollLockGUI"
-GUI.ResetOnSpawn = false
-GUI.IgnoreGuiInset = true
-GUI.DisplayOrder = 999999
-GUI.Parent = PlayerGui
-
--- ==========================================
--- CHỮ TROLL
--- ==========================================
-
-local TrollText = Instance.new("TextLabel")
-
-TrollText.Name = "TrollText"
-TrollText.Size = UDim2.fromOffset(500, 60)
-TrollText.Position = UDim2.fromScale(0.5, 0.08)
-TrollText.AnchorPoint = Vector2.new(0.5, 0.5)
-
-TrollText.BackgroundTransparency = 1
-TrollText.Text = "🚨 BÁO CHÁY!!! BỊ KHÓA THAO TÁC 😂"
-TrollText.TextScaled = true
-TrollText.Font = Enum.Font.GothamBold
-TrollText.TextStrokeTransparency = 0
-TrollText.ZIndex = 999999
-
-TrollText.Parent = GUI
-
--- ==========================================
--- 🚫 BLOCK INPUT
--- ==========================================
-
-local function BlockInput()
-    return Enum.ContextActionResult.Sink
-end
-
-ContextActionService:BindActionAtPriority(
-    "TROLL_BLOCK_INPUT",
-    BlockInput,
-    false,
-    Enum.ContextActionPriority.High.Value,
-
-    Enum.KeyCode.W,
-    Enum.KeyCode.A,
-    Enum.KeyCode.S,
-    Enum.KeyCode.D,
-
-    Enum.KeyCode.Up,
-    Enum.KeyCode.Down,
-    Enum.KeyCode.Left,
-    Enum.KeyCode.Right,
-
-    Enum.KeyCode.Space
-)
-
--- ==========================================
--- 🔒 KHÓA NHÂN VẬT
--- ==========================================
-
-local function LockCharacter()
-
-    local Character = Player.Character
-
-    if not Character then
+local function setTeleguiado(state)
+    if teleguiadoActive == state then
         return
     end
 
-    local Humanoid =
-        Character:FindFirstChildOfClass("Humanoid")
+    teleguiadoActive = state
 
-    if not Humanoid then
-        return
-    end
-
-    Humanoid.WalkSpeed = 0
-    Humanoid.JumpPower = 0
-    Humanoid.JumpHeight = 0
-
-    Humanoid.AutoRotate = false
-
-    Humanoid:Move(Vector3.zero, false)
-end
-
-LockCharacter()
-
-Player.CharacterAdded:Connect(function()
-
-    task.wait(0.5)
-
-    LockCharacter()
-
-end)
-
-RunService.Heartbeat:Connect(function()
-
-    LockCharacter()
-
-end)
-
--- ==========================================
--- 📷 KHÓA CAMERA
--- ==========================================
-
-local Camera = workspace.CurrentCamera
-local LockedCameraCFrame
-
-if Camera then
-    LockedCameraCFrame = Camera.CFrame
-end
-
-RunService:BindToRenderStep(
-    "TROLL_LOCK_CAMERA",
-    Enum.RenderPriority.Camera.Value + 1,
-    function()
-
-        Camera = workspace.CurrentCamera
-
-        if Camera and LockedCameraCFrame then
-            Camera.CFrame = LockedCameraCFrame
+    if not state then
+        if currentTween then
+            pcall(function()
+                currentTween:Cancel()
+            end)
+            currentTween = nil
         end
 
+        stepCounter = 0
+        phaseTimer = 0
+        isStraightPhase = false
     end
-)
 
--- ==========================================
--- 😂 ICON LIST
--- ==========================================
+    updateTeleguiadoUI()
+end
 
-local Icons = {
+-- =================================================================
+-- 2. PROXIMITY PROMPT
+-- =================================================================
 
-    "🔒",
-    "😂",
-    "💀",
-    "🚨",
-    "🔥",
-    "🚫",
-    "😈",
-    "🔐",
-    "🤡",
-    "🗿",
-    "❌",
-    "🤣",
-    "😭",
-    "😎",
-    "👹",
-    "👺",
-    "🙃",
-    "😵",
-    "🤯",
-    "😏",
-    "😱",
-    "🤪",
-    "🥶",
-    "🥴",
-    "💩",
-    "👀",
-    "⚠️",
-    "🚒"
+local shownPrompts = {}
 
-}
+local function bypassPrompt(prompt)
+    if prompt and prompt:IsA("ProximityPrompt") then
+        prompt.HoldDuration = 0
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = 25
+    end
+end
 
--- ==========================================
--- 💥 SPAM ICON VĨNH VIỄN
--- ==========================================
+local function getPromptPosition(prompt)
+    local parent = prompt.Parent
+
+    if not parent then
+        return nil
+    end
+
+    if parent:IsA("BasePart") then
+        return parent.Position
+
+    elseif parent:IsA("Attachment") then
+        return parent.WorldPosition
+
+    elseif parent:IsA("Model") then
+        return parent:GetPivot().Position
+    end
+
+    return nil
+end
+
+local function triggerPrompt(prompt)
+    if not prompt or not prompt.Enabled then
+        return
+    end
+
+    bypassPrompt(prompt)
+
+    if fireproximityprompt then
+        pcall(function()
+            fireproximityprompt(prompt)
+        end)
+    else
+        pcall(function()
+            prompt:InputHoldBegin()
+            prompt:InputHoldEnd()
+        end)
+    end
+end
+
+ProximityPromptService.PromptShown:Connect(function(prompt)
+    bypassPrompt(prompt)
+    shownPrompts[prompt] = true
+
+    if autoSteal then
+        triggerPrompt(prompt)
+    end
+end)
+
+ProximityPromptService.PromptHidden:Connect(function(prompt)
+    shownPrompts[prompt] = nil
+end)
+
+workspace.DescendantAdded:Connect(function(descendant)
+    if descendant:IsA("ProximityPrompt") then
+        bypassPrompt(descendant)
+    end
+end)
 
 task.spawn(function()
+    while true do
+        task.wait()
 
-    while GUI.Parent do
+        if not autoEggActive and not autoSteal then
+            continue
+        end
 
-        local Icon = Instance.new("TextLabel")
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not char then
+                return
+            end
 
-        Icon.Name = "PermanentIcon"
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then
+                return
+            end
 
-        local Size = math.random(35, 70)
+            -- =====================================================
+            -- AUTO PICK
+            -- =====================================================
 
-        Icon.Size = UDim2.fromOffset(Size, Size)
+            if autoEggActive then
+                local closestPrompt = nil
+                local minDist = 25
 
-        Icon.Position = UDim2.fromScale(
-            math.random(3, 97) / 100,
-            math.random(5, 95) / 100
+                for prompt, _ in pairs(shownPrompts) do
+                    if prompt
+                        and prompt.Enabled
+                        and prompt.Parent
+                        and prompt:IsDescendantOf(
+                            workspace:FindFirstChild("AreaEggSlotsClient")
+                            or workspace
+                        )
+                    then
+                        local pos = getPromptPosition(prompt)
+
+                        if pos then
+                            local dist = (hrp.Position - pos).Magnitude
+
+                            if dist <= minDist then
+                                minDist = dist
+                                closestPrompt = prompt
+                            end
+                        end
+                    end
+                end
+
+                if closestPrompt then
+                    triggerPrompt(closestPrompt)
+                    setTeleguiado(true)
+                end
+            end
+
+            -- =====================================================
+            -- AUTO STEAL
+            -- =====================================================
+
+            if autoSteal then
+                for prompt, _ in pairs(shownPrompts) do
+                    if prompt
+                        and prompt.Enabled
+                        and prompt.Parent
+                    then
+                        local pos = getPromptPosition(prompt)
+
+                        if pos then
+                            local dist = (hrp.Position - pos).Magnitude
+
+                            if dist <= 25 then
+                                triggerPrompt(prompt)
+                            end
+                        else
+                            triggerPrompt(prompt)
+                        end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
+ProximityPromptService.PromptTriggered:Connect(function(prompt, player)
+    if player == LocalPlayer and autoEggActive then
+        setTeleguiado(true)
+    end
+end)
+
+-- =================================================================
+-- 3. ANTI-STUN & ANTI-KNOCKBACK
+-- =================================================================
+
+local function setupCharacter(char)
+    if not char then
+        return
+    end
+
+    local hum = char:WaitForChild("Humanoid", 5)
+
+    if hum then
+        hum:SetStateEnabled(
+            Enum.HumanoidStateType.Physics,
+            false
         )
 
-        Icon.AnchorPoint = Vector2.new(0.5, 0.5)
+        hum:SetStateEnabled(
+            Enum.HumanoidStateType.Ragdoll,
+            false
+        )
 
-        Icon.BackgroundTransparency = 1
+        hum:SetStateEnabled(
+            Enum.HumanoidStateType.FallingDown,
+            false
+        )
 
-        Icon.Text =
-            Icons[math.random(1, #Icons)]
+        hum.StateChanged:Connect(function(_, newState)
+            if antiStun and (
+                newState == Enum.HumanoidStateType.Physics
+                or newState == Enum.HumanoidStateType.Ragdoll
+                or newState == Enum.HumanoidStateType.FallingDown
+            ) then
 
-        Icon.TextScaled = true
-        Icon.TextStrokeTransparency = 0
-        Icon.ZIndex = 100
+                hum:ChangeState(
+                    Enum.HumanoidStateType.GettingUp
+                )
 
-        Icon.Parent = GUI
+                local hrp = char:FindFirstChild(
+                    "HumanoidRootPart"
+                )
 
-        -- ❗ KHÔNG Destroy
-        -- ❗ Icon cũ giữ nguyên
+                if hrp then
+                    hrp.AssemblyLinearVelocity = Vector3.zero
+                end
+            end
+        end)
+    end
+end
 
-        task.wait(ICON_DELAY)
+if LocalPlayer.Character then
+    setupCharacter(LocalPlayer.Character)
+end
 
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+
+RunService.Stepped:Connect(function()
+    if not antiStun then
+        return
     end
 
+    pcall(function()
+        local char = LocalPlayer.Character
+
+        if not char then
+            return
+        end
+
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+
+        if hum then
+            for _, motor in ipairs(char:GetDescendants()) do
+                if motor:IsA("Motor6D") and not motor.Enabled then
+                    motor.Enabled = true
+                end
+            end
+
+            if hum.Sit then
+                hum.Sit = false
+            end
+
+            if hum.PlatformStand then
+                hum.PlatformStand = false
+            end
+
+            hum.AutoRotate = true
+        end
+
+        if hrp and hrp.Anchored then
+            hrp.Anchored = false
+        end
+    end)
 end)
 
--- ==========================================
--- 🚨 CHUÔNG BÁO CHÁY
--- ==========================================
+-- =================================================================
+-- 4. TELEGUIADO BAY TWEEN VỀ BASE
+-- =================================================================
 
-local Alarm = Instance.new("Sound")
+RunService.RenderStepped:Connect(function(deltaTime)
+    if not teleguiadoActive then
+        return
+    end
 
-Alarm.Name = "FireAlarm"
+    pcall(function()
+        local char = LocalPlayer.Character
 
--- Roblox audio ID
-Alarm.SoundId = "rbxassetid://9118823101"
+        if not char then
+            return
+        end
 
-Alarm.Volume = ALARM_VOLUME
-Alarm.Looped = false
-Alarm.Parent = GUI
+        local hrp = char:FindFirstChild(
+            "HumanoidRootPart"
+        )
 
--- ==========================================
--- 🚨 ALARM LOOP
--- ==========================================
+        if not hrp then
+            return
+        end
+
+        local targetPos = baseCFrame.Position
+        local currentPos = hrp.Position
+
+        local flatTarget = Vector3.new(
+            targetPos.X,
+            currentPos.Y,
+            targetPos.Z
+        )
+
+        local mainDir = flatTarget - currentPos
+        local distance = mainDir.Magnitude
+
+        if distance <= 6 then
+            setTeleguiado(false)
+            return
+        end
+
+        phaseTimer = phaseTimer + deltaTime
+
+        if not isStraightPhase and phaseTimer >= 1.0 then
+            isStraightPhase = true
+            phaseTimer = 0
+
+        elseif isStraightPhase and phaseTimer >= 0.5 then
+            isStraightPhase = false
+            phaseTimer = 0
+        end
+
+        local unitDir = mainDir.Unit
+        local moveDir = unitDir
+
+        if not isStraightPhase then
+            local perp = Vector3.new(
+                -unitDir.Z,
+                0,
+                unitDir.X
+            ).Unit
+
+            stepCounter = stepCounter + 1
+
+            local zWave =
+                math.sin(stepCounter * 0.35)
+                * (chunkVal / 10)
+
+            moveDir = (
+                unitDir
+                + perp * zWave
+            ).Unit
+        end
+
+        local moveDistance =
+            speedVal * deltaTime
+
+        local nextPos =
+            currentPos
+            + (moveDir * moveDistance)
+
+        if currentTween then
+            pcall(function()
+                currentTween:Cancel()
+            end)
+        end
+
+        local tweenInfo = TweenInfo.new(
+            deltaTime,
+            Enum.EasingStyle.Linear
+        )
+
+        currentTween = TweenService:Create(
+            hrp,
+            tweenInfo,
+            {
+                CFrame = CFrame.new(
+                    nextPos,
+                    nextPos + moveDir
+                )
+            }
+        )
+
+        currentTween:Play()
+    end)
+end)
+
+-- =================================================================
+-- 5. HITBOX EXPANDER
+-- =================================================================
+
+local function resetHitboxes()
+    pcall(function()
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer
+                and player.Character
+            then
+                local hrp = player.Character:FindFirstChild(
+                    "HumanoidRootPart"
+                )
+
+                if hrp then
+                    hrp.Size = Vector3.new(2, 2, 1)
+                    hrp.Transparency = 1
+                    hrp.Material = Enum.Material.Plastic
+                    hrp.CanCollide = false
+                end
+            end
+        end
+    end)
+end
 
 task.spawn(function()
+    while true do
+        task.wait(0.3)
 
-    while GUI.Parent do
+        if hitboxActive then
+            pcall(function()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer
+                        and player.Character
+                    then
+                        local hrp =
+                            player.Character:FindFirstChild(
+                                "HumanoidRootPart"
+                            )
 
-        Alarm:Play()
+                        if hrp then
+                            hrp.Size = Vector3.new(
+                                15,
+                                15,
+                                15
+                            )
 
-        task.wait(3)
+                            hrp.Transparency = 0.7
+                            hrp.BrickColor =
+                                BrickColor.new("Really red")
 
-        Alarm:Stop()
+                            hrp.Material =
+                                Enum.Material.Neon
 
-        task.wait(0.5)
-
+                            hrp.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
     end
-
 end)
 
--- ==========================================
--- 🔥 FLASH CHỮ
--- ==========================================
+-- =================================================================
+-- 6. ANTI TRAP
+-- =================================================================
+
+local trapESP = {}
+
+local function createTrapESP(part)
+    if not antiTrapActive then
+        return
+    end
+
+    if not part or not part:IsA("BasePart") then
+        return
+    end
+
+    if trapESP[part] then
+        return
+    end
+
+    local highlight = Instance.new("Highlight")
+
+    highlight.Name =
+        "DragonNova_TrapESP"
+
+    highlight.Adornee = part
+
+    highlight.DepthMode =
+        Enum.HighlightDepthMode.AlwaysOnTop
+
+    highlight.FillTransparency = 0.6
+    highlight.OutlineTransparency = 0
+
+    highlight.FillColor =
+        Color3.fromRGB(255, 50, 50)
+
+    highlight.OutlineColor =
+        Color3.fromRGB(255, 255, 255)
+
+    highlight.Parent = part
+
+    trapESP[part] = highlight
+end
+
+local function removeTrapESP()
+    for part, highlight in pairs(trapESP) do
+        pcall(function()
+            if highlight then
+                highlight:Destroy()
+            end
+        end)
+
+        trapESP[part] = nil
+    end
+end
+
+local function disableTrapPart(part)
+    if not part or not part:IsA("BasePart") then
+        return
+    end
+
+    pcall(function()
+        part.CanTouch = false
+        part.CanCollide = false
+        part.CanQuery = false
+
+        if string.lower(part.Name) == "hitbox" then
+            part.Size = Vector3.new(
+                0.001,
+                0.001,
+                0.001
+            )
+        end
+
+        for _, child in ipairs(part:GetDescendants()) do
+            if child:IsA("TouchTransmitter")
+                or child.ClassName == "TouchInterest"
+            then
+                child:Destroy()
+            end
+        end
+
+        if antiTrapActive then
+            createTrapESP(part)
+        end
+    end)
+end
+
+local function scanTraps()
+    local debris =
+        workspace:FindFirstChild("__DEBRIS")
+
+    if not debris then
+        return
+    end
+
+    for _, child in ipairs(debris:GetChildren()) do
+
+        for _, descendant in ipairs(
+            child:GetDescendants()
+        ) do
+            if descendant:IsA("BasePart") then
+                disableTrapPart(descendant)
+            end
+        end
+
+        if child:IsA("BasePart") then
+            disableTrapPart(child)
+        end
+    end
+end
+
+local function setAntiTrap(state)
+    antiTrapActive = state
+
+    if state then
+        scanTraps()
+    else
+        removeTrapESP()
+    end
+end
 
 task.spawn(function()
+    while true do
+        task.wait(0.1)
 
-    while GUI.Parent do
-
-        TrollText.Text =
-            "🚨 BÁO CHÁY!!! Tài Khoản Của Bạn Bị Lock😂"
-
-        task.wait(2)
-
-        TrollText.Text =
-            "🔥 Đốt Bộ Nhơz🔥"
-
-        task.wait(0.5)
-
-        TrollText.Text =
-            "💀 KHÔNG THỂ DI CHUYỂN 💀"
-
-        task.wait(0.5)
-
+        if antiTrapActive then
+            pcall(scanTraps)
+        end
     end
-
 end)
 
--- ==========================================
--- CONSOLE
--- ==========================================
+workspace.DescendantAdded:Connect(function(obj)
+    if not antiTrapActive then
+        return
+    end
 
-print("================================")
-print("🔥 TROLL LOCK ACTIVATED")
-print("🔒 Movement: LOCKED")
-print("📷 Camera: LOCKED")
-print("🚫 Input: BLOCKED")
-print("😂 Icons: PERMANENT")
-print("🚨 Fire Alarm: ON")
-print("================================")
+    pcall(function()
+        local debris =
+            workspace:FindFirstChild("__DEBRIS")
+
+        if debris
+            and obj:IsDescendantOf(debris)
+            and obj:IsA("BasePart")
+        then
+            disableTrapPart(obj)
+        end
+    end)
+end)
+
+-- =================================================================
+-- 7. GIAO DIỆN DRAGON NOVA HUB
+-- =================================================================
+
+local function createHubUI()
+
+    local oldGui =
+        CoreGui:FindFirstChild("DragonNovaHub")
+        or (
+            LocalPlayer:FindFirstChild("PlayerGui")
+            and LocalPlayer.PlayerGui:FindFirstChild(
+                "DragonNovaHub"
+            )
+        )
+
+    if oldGui then
+        oldGui:Destroy()
+    end
+
+    local screenGui = Instance.new("ScreenGui")
+
+    screenGui.Name =
+        "DragonNovaHub"
+
+    screenGui.ResetOnSpawn = false
+
+    screenGui.Parent =
+        (gethui and gethui())
+        or CoreGui
+        or LocalPlayer:WaitForChild("PlayerGui")
+
+    -- =============================================================
+    -- MAIN FRAME
+    -- =============================================================
+
+    local mainFrame = Instance.new("Frame")
+
+    mainFrame.Name = "MainFrame"
+    mainFrame.Parent = screenGui
+
+    mainFrame.Size =
+        UDim2.new(0, 240, 0, 260)
+
+    mainFrame.Position =
+        UDim2.new(0.05, 0, 0.2, 0)
+
+    mainFrame.BackgroundColor3 =
+        Color3.fromRGB(20, 20, 25)
+
+    mainFrame.Active = true
+    mainFrame.Draggable = true
+
+    Instance.new("UICorner", mainFrame).CornerRadius =
+        UDim.new(0, 10)
+
+    local mainStroke =
+        Instance.new("UIStroke", mainFrame)
+
+    mainStroke.Color =
+        Color3.fromRGB(0, 200, 255)
+
+    mainStroke.Thickness = 2
+
+    -- =============================================================
+    -- TITLE
+    -- =============================================================
+
+    local titleLabel =
+        Instance.new("TextLabel")
+
+    titleLabel.Parent = mainFrame
+
+    titleLabel.Size =
+        UDim2.new(0.75, 0, 0, 35)
+
+    titleLabel.Position =
+        UDim2.new(0.05, 0, 0, 0)
+
+    titleLabel.Text =
+        "🐉 DRAGON NOVA HUB"
+
+    titleLabel.Font =
+        Enum.Font.SourceSansBold
+
+    titleLabel.TextSize = 15
+
+    titleLabel.TextColor3 =
+        Color3.fromRGB(0, 200, 255)
+
+    titleLabel.TextXAlignment =
+        Enum.TextXAlignment.Left
+
+    titleLabel.BackgroundTransparency = 1
+
+    -- =============================================================
+    -- MINIMIZE
+    -- =============================================================
+
+    local btnMin =
+        Instance.new("TextButton")
+
+    btnMin.Parent = mainFrame
+
+    btnMin.Size =
+        UDim2.new(0, 28, 0, 28)
+
+    btnMin.Position =
+        UDim2.new(0.85, 0, 0.02, 0)
+
+    btnMin.BackgroundColor3 =
+        Color3.fromRGB(45, 45, 55)
+
+    btnMin.Text = "[-]"
+
+    btnMin.Font =
+        Enum.Font.SourceSansBold
+
+    btnMin.TextColor3 =
+        Color3.fromRGB(255, 255, 255)
+
+    btnMin.TextSize = 14
+
+    Instance.new("UICorner", btnMin).CornerRadius =
+        UDim.new(0, 6)
+
+    local minIcon =
+        Instance.new("TextButton")
+
+    minIcon.Name = "MinIcon"
+    minIcon.Parent = screenGui
+
+    minIcon.Size =
+        UDim2.new(0, 50, 0, 50)
+
+    minIcon.Position =
+        UDim2.new(0.02, 0, 0.45, 0)
+
+    minIcon.BackgroundColor3 =
+        Color3.fromRGB(20, 20, 25)
+
+    minIcon.Text = "🐉"
+
+    minIcon.Font =
+        Enum.Font.SourceSansBold
+
+    minIcon.TextSize = 24
+
+    minIcon.Visible = false
+    minIcon.Active = true
+    minIcon.Draggable = true
+
+    Instance.new("UICorner", minIcon).CornerRadius =
+        UDim.new(1, 0)
+
+    local iconStroke =
+        Instance.new("UIStroke", minIcon)
+
+    iconStroke.Color =
+        Color3.fromRGB(0, 200, 255)
+
+    iconStroke.Thickness = 2
+
+    btnMin.MouseButton1Click:Connect(function()
+        mainFrame.Visible = false
+        minIcon.Visible = true
+    end)
+
+    minIcon.MouseButton1Click:Connect(function()
+        mainFrame.Visible = true
+        minIcon.Visible = false
+    end)
+
+    -- =============================================================
+    -- SLIDER
+    -- =============================================================
+
+    local function createSlider(
+        yPos,
+        name,
+        minVal,
+        maxVal,
+        defaultVal,
+        callback
+    )
+
+        local container =
+            Instance.new("Frame")
+
+        container.Parent = mainFrame
+
+        container.Size =
+            UDim2.new(0.9, 0, 0, 38)
+
+        container.Position =
+            UDim2.new(0.05, 0, 0, yPos)
+
+        container.BackgroundTransparency = 1
+
+        local lbl =
+            Instance.new("TextLabel")
+
+        lbl.Parent = container
+
+        lbl.Size =
+            UDim2.new(1, 0, 0, 16)
+
+        lbl.Text =
+            name .. ": " .. tostring(defaultVal)
+
+        lbl.Font =
+            Enum.Font.SourceSansBold
+
+        lbl.TextColor3 =
+            Color3.fromRGB(220, 220, 220)
+
+        lbl.TextSize = 12
+
+        lbl.TextXAlignment =
+            Enum.TextXAlignment.Left
+
+        lbl.BackgroundTransparency = 1
+
+        local bg =
+            Instance.new("Frame")
+
+        bg.Parent = container
+
+        bg.Size =
+            UDim2.new(1, 0, 0, 8)
+
+        bg.Position =
+            UDim2.new(0, 0, 0, 20)
+
+        bg.BackgroundColor3 =
+            Color3.fromRGB(45, 45, 55)
+
+        Instance.new("UICorner", bg).CornerRadius =
+            UDim.new(0, 4)
+
+        local fill =
+            Instance.new("Frame")
+
+        fill.Parent = bg
+
+        local initPercent =
+            math.clamp(
+                (defaultVal - minVal)
+                / (maxVal - minVal),
+                0,
+                1
+            )
+
+        fill.Size =
+            UDim2.new(initPercent, 0, 1, 0)
+
+        fill.BackgroundColor3 =
+            Color3.fromRGB(0, 200, 255)
+
+        Instance.new("UICorner", fill).CornerRadius =
+            UDim.new(0, 4)
+
+        local dragging = false
+
+        local function update(input)
+
+            local pos =
+                math.clamp(
+                    (
+                        input.Position.X
+                        - bg.AbsolutePosition.X
+                    )
+                    / bg.AbsoluteSize.X,
+                    0,
+                    1
+                )
+
+            fill.Size =
+                UDim2.new(pos, 0, 1, 0)
+
+            local val =
+                math.floor(
+                    minVal
+                    + (maxVal - minVal) * pos
+                )
+
+            lbl.Text =
+                name .. ": " .. tostring(val)
+
+            callback(val)
+        end
+
+        bg.InputBegan:Connect(function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseButton1
+                or input.UserInputType ==
+                Enum.UserInputType.Touch
+            then
+
+                dragging = true
+                update(input)
+            end
+        end)
+
+        UserInputService.InputChanged:Connect(function(input)
+
+            if dragging
+                and (
+                    input.UserInputType ==
+                    Enum.UserInputType.MouseMovement
+                    or input.UserInputType ==
+                    Enum.UserInputType.Touch
+                )
+            then
+                update(input)
+            end
+        end)
+
+        UserInputService.InputEnded:Connect(function(input)
+
+            if input.UserInputType ==
+                Enum.UserInputType.MouseButton1
+                or input.UserInputType ==
+                Enum.UserInputType.Touch
+            then
+                dragging = false
+            end
+        end)
+    end
+
+    -- =============================================================
+    -- SLIDERS
+    -- =============================================================
+
+    createSlider(
+        35,
+        "⚡ Tween Speed",
+        10,
+        600,
+        speedVal,
+        function(val)
+            speedVal = val
+        end
+    )
+
+    createSlider(
+        75,
+        "🌀 Chunk (S+Z)",
+        2,
+        100,
+        chunkVal,
+        function(val)
+            chunkVal = val
+        end
+    )
+
+    -- =============================================================
+    -- BUTTON
+    -- =============================================================
+
+    local function createGridButton(
+        xRel,
+        yPos,
+        wRel,
+        text,
+        defaultState,
+        callback
+    )
+
+        local btn =
+            Instance.new("TextButton")
+
+        btn.Parent = mainFrame
+
+        btn.Size =
+            UDim2.new(wRel, -4, 0, 36)
+
+        btn.Position =
+            UDim2.new(xRel, 2, 0, yPos)
+
+        btn.BackgroundColor3 =
+            Color3.fromRGB(35, 35, 45)
+
+        btn.Text =
+            text
+            .. (defaultState and ": ON" or ": OFF")
+
+        btn.Font =
+            Enum.Font.SourceSansBold
+
+        btn.TextColor3 =
+            defaultState
+            and Color3.fromRGB(0, 255, 150)
+            or Color3.fromRGB(255, 75, 75)
+
+        btn.TextSize = 12
+
+        Instance.new("UICorner", btn).CornerRadius =
+            UDim.new(0, 8)
+
+        local stroke =
+            Instance.new("UIStroke", btn)
+
+        stroke.Color =
+            defaultState
+            and Color3.fromRGB(0, 255, 150)
+            or Color3.fromRGB(255, 75, 75)
+
+        stroke.Thickness = 1.5
+
+        btn.MouseButton1Click:Connect(function()
+
+            local newState = callback()
+
+            btn.Text =
+                text
+                .. (newState and ": ON" or ": OFF")
+
+            btn.TextColor3 =
+                newState
+                and Color3.fromRGB(0, 255, 150)
+                or Color3.fromRGB(255, 75, 75)
+
+            stroke.Color =
+                newState
+                and Color3.fromRGB(0, 255, 150)
+                or Color3.fromRGB(255, 75, 75)
+        end)
+
+        return btn
+    end
+
+    -- =============================================================
+    -- TELEGUIADO
+    -- =============================================================
+
+    local btnTele =
+        createGridButton(
+            0.05,
+            120,
+            0.45,
+            "🚀 Teleguiado",
+            teleguiadoActive,
+            function()
+
+                setTeleguiado(
+                    not teleguiadoActive
+                )
+
+                return teleguiadoActive
+            end
+        )
+
+    updateTeleguiadoUI = function()
+
+        btnTele.Text =
+            "🚀 Teleguiado"
+            .. (
+                teleguiadoActive
+                and ": ON"
+                or ": OFF"
+            )
+
+        btnTele.TextColor3 =
+            teleguiadoActive
+            and Color3.fromRGB(0, 255, 150)
+            or Color3.fromRGB(255, 75, 75)
+    end
+
+    -- =============================================================
+    -- AUTO STEAL
+    -- =============================================================
+
+    createGridButton(
+        0.50,
+        120,
+        0.45,
+        "⚡ Auto Steal",
+        autoSteal,
+        function()
+
+            autoSteal =
+                not autoSteal
+
+            return autoSteal
+        end
+    )
+
+    -- =============================================================
+    -- ANTI STUN
+    -- =============================================================
+
+    createGridButton(
+        0.05,
+        165,
+        0.45,
+        "🛡️ Anti Stun",
+        antiStun,
+        function()
+
+            antiStun =
+                not antiStun
+
+            return antiStun
+        end
+    )
+
+    -- =============================================================
+    -- AUTO PICK
+    -- =============================================================
+
+    createGridButton(
+        0.50,
+        165,
+        0.45,
+        "🥚 Auto Pick",
+        autoEggActive,
+        function()
+
+            autoEggActive =
+                not autoEggActive
+
+            return autoEggActive
+        end
+    )
+
+    -- =============================================================
+    -- HITBOX
+    -- =============================================================
+
+    createGridButton(
+        0.05,
+        210,
+        0.45,
+        "🎯 Hitbox",
+        hitboxActive,
+        function()
+
+            hitboxActive =
+                not hitboxActive
+
+            if not hitboxActive then
+                resetHitboxes()
+            end
+
+            return hitboxActive
+        end
+    )
+
+    -- =============================================================
+    -- ANTI TRAP
+    -- =============================================================
+
+    createGridButton(
+        0.50,
+        210,
+        0.45,
+        "🪤 Anti Trap",
+        antiTrapActive,
+        function()
+
+            setAntiTrap(
+                not antiTrapActive
+            )
+
+            return antiTrapActive
+        end
+    )
+end
+
+-- =================================================================
+-- START
+-- =================================================================
+
+createHubUI()
