@@ -1,12 +1,11 @@
 --[[
-    💻 DELTA TROLL SCREEN
+    🔥 DELTA TROLL LOCK
     =========================
-    💻 Hacking... 
-    🔒 Lock Movement
-    📷 Lock Camera
-    😂 Permanent Icons
-    🚨 Alarm / Beep
-    🖥️ Fake Terminal
+    🔒 Khóa di chuyển
+    📷 Khóa xoay camera
+    🚫 Khóa input
+    😂 Spam icon vĩnh viễn
+    🚨 Chuông báo cháy
 ]]
 
 local Players = game:GetService("Players")
@@ -20,86 +19,49 @@ local PlayerGui = Player:WaitForChild("PlayerGui")
 -- CONFIG
 -- ==========================================
 
-local ICON_DELAY = 0.18
+local ICON_DELAY = 0.12
+local ALARM_VOLUME = 2
 
 -- ==========================================
--- CLEAN OLD GUI
+-- XÓA GUI CŨ
 -- ==========================================
 
-local Old = PlayerGui:FindFirstChild("TrollHackGUI")
+local OldGUI = PlayerGui:FindFirstChild("TrollLockGUI")
 
-if Old then
-    Old:Destroy()
+if OldGUI then
+    OldGUI:Destroy()
 end
 
 -- ==========================================
--- SCREEN GUI
+-- GUI
 -- ==========================================
 
 local GUI = Instance.new("ScreenGui")
-
-GUI.Name = "TrollHackGUI"
+GUI.Name = "TrollLockGUI"
 GUI.ResetOnSpawn = false
 GUI.IgnoreGuiInset = true
 GUI.DisplayOrder = 999999
-
 GUI.Parent = PlayerGui
 
 -- ==========================================
--- 💻 HACKING TEXT
+-- CHỮ TROLL
 -- ==========================================
 
-local HackText = Instance.new("TextLabel")
+local TrollText = Instance.new("TextLabel")
 
-HackText.Size = UDim2.fromScale(0.9, 0.1)
-HackText.Position = UDim2.fromScale(0.5, 0.08)
-HackText.AnchorPoint = Vector2.new(0.5, 0.5)
+TrollText.Name = "TrollText"
+TrollText.Size = UDim2.fromOffset(500, 60)
+TrollText.Position = UDim2.fromScale(0.5, 0.08)
+TrollText.AnchorPoint = Vector2.new(0.5, 0.5)
 
-HackText.BackgroundTransparency = 1
+TrollText.BackgroundTransparency = 1
+TrollText.Text = "🚨 BÁO CHÁY!!! BỊ KHÓA THAO TÁC 😂"
+TrollText.TextScaled = true
+TrollText.Font = Enum.Font.GothamBold
+TrollText.TextStrokeTransparency = 0
+TrollText.ZIndex = 999999
 
-HackText.Text = "💻 Hacking..."
-HackText.TextScaled = true
-HackText.Font = Enum.Font.Code
-
-HackText.TextStrokeTransparency = 0
-HackText.ZIndex = 999999
-
-HackText.Parent = GUI
-
--- ==========================================
--- 🖥️ FAKE TERMINAL
--- ==========================================
-
-local Terminal = Instance.new("TextLabel")
-
-Terminal.Size = UDim2.fromScale(0.85, 0.35)
-Terminal.Position = UDim2.fromScale(0.5, 0.55)
-Terminal.AnchorPoint = Vector2.new(0.5, 0.5)
-
-Terminal.BackgroundTransparency = 0.25
-
-Terminal.TextColor3 = Color3.fromRGB(255,255,255)
-
-Terminal.TextXAlignment = Enum.TextXAlignment.Left
-Terminal.TextYAlignment = Enum.TextYAlignment.Top
-
-Terminal.TextScaled = false
-Terminal.TextSize = 17
-
-Terminal.Font = Enum.Font.Code
-
-Terminal.Text =
-[[> INITIALIZING...
-> CONNECTING...
-> BYPASSING PLAYER INPUT...
-> LOCKING MOVEMENT...
-> CAMERA CONTROL: LOCKED
-> ACCESS: ██████████
-> PROCESSING...
-> HACKING... 💻]]
-
-Terminal.ZIndex = 999998
-Terminal.Parent = GUI
+TrollText.Parent = GUI
 
 -- ==========================================
 -- 🚫 BLOCK INPUT
@@ -110,7 +72,7 @@ local function BlockInput()
 end
 
 ContextActionService:BindActionAtPriority(
-    "TROLL_HACK_INPUT",
+    "TROLL_BLOCK_INPUT",
     BlockInput,
     false,
     Enum.ContextActionPriority.High.Value,
@@ -129,7 +91,7 @@ ContextActionService:BindActionAtPriority(
 )
 
 -- ==========================================
--- 🔒 LOCK CHARACTER
+-- 🔒 KHÓA NHÂN VẬT
 -- ==========================================
 
 local function LockCharacter()
@@ -150,10 +112,10 @@ local function LockCharacter()
     Humanoid.WalkSpeed = 0
     Humanoid.JumpPower = 0
     Humanoid.JumpHeight = 0
+
     Humanoid.AutoRotate = false
 
     Humanoid:Move(Vector3.zero, false)
-
 end
 
 LockCharacter()
@@ -173,14 +135,14 @@ RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 📷 LOCK CAMERA
+-- 📷 KHÓA CAMERA
 -- ==========================================
 
 local Camera = workspace.CurrentCamera
-local LockedCamera
+local LockedCameraCFrame
 
 if Camera then
-    LockedCamera = Camera.CFrame
+    LockedCameraCFrame = Camera.CFrame
 end
 
 RunService:BindToRenderStep(
@@ -190,42 +152,52 @@ RunService:BindToRenderStep(
 
         Camera = workspace.CurrentCamera
 
-        if Camera and LockedCamera then
-            Camera.CFrame = LockedCamera
+        if Camera and LockedCameraCFrame then
+            Camera.CFrame = LockedCameraCFrame
         end
 
     end
 )
 
 -- ==========================================
--- 😂 ICONS
+-- 😂 ICON LIST
 -- ==========================================
 
 local Icons = {
 
-    "💻",
     "🔒",
+    "😂",
+    "💀",
     "🚨",
     "🔥",
-    "💀",
-    "😂",
-    "🤡",
-    "⚠️",
     "🚫",
-    "👾",
-    "🖥️",
-    "🔐",
     "😈",
-    "💩",
+    "🔐",
+    "🤡",
     "🗿",
     "❌",
-    "⚡",
-    "👀"
+    "🤣",
+    "😭",
+    "😎",
+    "👹",
+    "👺",
+    "🙃",
+    "😵",
+    "🤯",
+    "😏",
+    "😱",
+    "🤪",
+    "🥶",
+    "🥴",
+    "💩",
+    "👀",
+    "⚠️",
+    "🚒"
 
 }
 
 -- ==========================================
--- 💥 PERMANENT ICON SPAM
+-- 💥 SPAM ICON VĨNH VIỄN
 -- ==========================================
 
 task.spawn(function()
@@ -234,33 +206,32 @@ task.spawn(function()
 
         local Icon = Instance.new("TextLabel")
 
-        local Size = math.random(30,65)
+        Icon.Name = "PermanentIcon"
 
-        Icon.Size =
-            UDim2.fromOffset(Size,Size)
+        local Size = math.random(35, 70)
 
-        Icon.Position =
-            UDim2.fromScale(
-                math.random(3,97)/100,
-                math.random(5,95)/100
-            )
+        Icon.Size = UDim2.fromOffset(Size, Size)
 
-        Icon.AnchorPoint =
-            Vector2.new(0.5,0.5)
+        Icon.Position = UDim2.fromScale(
+            math.random(3, 97) / 100,
+            math.random(5, 95) / 100
+        )
+
+        Icon.AnchorPoint = Vector2.new(0.5, 0.5)
 
         Icon.BackgroundTransparency = 1
 
         Icon.Text =
-            Icons[math.random(1,#Icons)]
+            Icons[math.random(1, #Icons)]
 
         Icon.TextScaled = true
         Icon.TextStrokeTransparency = 0
-
-        Icon.ZIndex = 500
+        Icon.ZIndex = 100
 
         Icon.Parent = GUI
 
-        -- ❗ KHÔNG XÓA ICON
+        -- ❗ KHÔNG Destroy
+        -- ❗ Icon cũ giữ nguyên
 
         task.wait(ICON_DELAY)
 
@@ -269,109 +240,76 @@ task.spawn(function()
 end)
 
 -- ==========================================
--- 💻 HACKING ANIMATION
+-- 🚨 CHUÔNG BÁO CHÁY
+-- ==========================================
+
+local Alarm = Instance.new("Sound")
+
+Alarm.Name = "FireAlarm"
+
+-- Roblox audio ID
+Alarm.SoundId = "rbxassetid://9118823101"
+
+Alarm.Volume = ALARM_VOLUME
+Alarm.Looped = false
+Alarm.Parent = GUI
+
+-- ==========================================
+-- 🚨 ALARM LOOP
 -- ==========================================
 
 task.spawn(function()
 
-    local dots = {
-        "💻 Hacking.",
-        "💻 Hacking..",
-        "💻 Hacking...",
-        "💻 Hacking...."
-    }
-
-    local i = 1
-
     while GUI.Parent do
 
-        HackText.Text = dots[i]
+        Alarm:Play()
 
-        i += 1
+        task.wait(3)
 
-        if i > #dots then
-            i = 1
-        end
+        Alarm:Stop()
 
-        task.wait(0.35)
+        task.wait(0.5)
 
     end
 
 end)
 
 -- ==========================================
--- 🖥️ TERMINAL ANIMATION
+-- 🔥 FLASH CHỮ
 -- ==========================================
-
-task.spawn(function()
-
-    local Messages = {
-
-        "> INITIALIZING...",
-        "> CONNECTING...",
-        "> SCANNING PLAYER...",
-        "> LOCKING INPUT...",
-        "> CAMERA CONTROL: LOCKED",
-        "> MOVEMENT: DISABLED",
-        "> PROCESSING...",
-        "> ACCESS ██████████",
-        "> INJECTING...",
-        "> HACKING... 💻",
-        "> LOL 😂",
-        "> SYSTEM TROLLED 🤡"
-
-    }
-
-    while GUI.Parent do
-
-        Terminal.Text =
-            Messages[math.random(1,#Messages)]
-
-        task.wait(0.35)
-
-    end
-
-end)
-
--- ==========================================
--- 🔊 TROLL BEEP
--- ==========================================
-
-local Beep = Instance.new("Sound")
-
-Beep.Name = "TrollBeep"
-
--- Generic Roblox audio
-Beep.SoundId = "rbxassetid://9118823101"
-
-Beep.Volume = 1
-Beep.Looped = false
-Beep.Parent = GUI
 
 task.spawn(function()
 
     while GUI.Parent do
 
-        Beep:Play()
+        TrollText.Text =
+            "🚨 BÁO CHÁY!!! Tài Khoản Của Bạn Bị Lock😂"
 
         task.wait(2)
 
-        Beep:Stop()
+        TrollText.Text =
+            "🔥 Đốt Bộ Nhơz🔥"
 
-        task.wait(0.3)
+        task.wait(0.5)
+
+        TrollText.Text =
+            "💀 KHÔNG THỂ DI CHUYỂN 💀"
+
+        task.wait(0.5)
 
     end
 
 end)
 
 -- ==========================================
--- 💀 FINAL MESSAGE
+-- CONSOLE
 -- ==========================================
 
-print("====================================")
-print("💻 TROLL HACK SCREEN ACTIVATED")
-print("🔒 MOVEMENT LOCKED")
-print("📷 CAMERA LOCKED")
-print("😂 PERMANENT ICONS")
-print("🚨 TROLL SOUND")
-print("====================================")
+print("================================")
+print("🔥 TROLL LOCK ACTIVATED")
+print("🔒 Movement: LOCKED")
+print("📷 Camera: LOCKED")
+print("🚫 Input: BLOCKED")
+print("😂 Icons: PERMANENT")
+print("🚨 Fire Alarm: ON")
+print("================================")
