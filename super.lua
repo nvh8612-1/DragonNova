@@ -1,6 +1,6 @@
--- Delta Executor: Dragon Nova Hub v18.3
--- Giữ nguyên chức năng gốc
--- ĐÃ BỎ: Guard Avoid + SakuraTrees
+-- Delta Executor: Dragon Nova Hub v18.7 (Default Config Updated - Speed: 310, Chunk: 20)
+-- 🚀 Teleguiado: Bay theo chuỗi logic mới (Thẳng 0.5s -> Trái Z 0.3s -> Thẳng 0.1s -> Phải Z 0.3s)
+-- 👾 Monster Parasite: Đi tìm bay thẳng tuyệt đối -> Nhìn từ trên xuống đất -> Tương tác -> Về base bằng Teleguiado
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -11,7 +11,7 @@ local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
 -- =================================================================
--- 1. CẤU HÌNH TRẠNG THÁI DRAGON NOVA HUB
+-- 1. CẤU HÌNH TRẠNG THÁI DRAGON NOVA HUB (MẶC ĐỊNH MỚI)
 -- =================================================================
 
 local teleguiadoActive = false
@@ -20,17 +20,20 @@ local antiStun = false
 local autoEggActive = false
 local hitboxActive = false
 local antiTrapActive = false
+local monsterParasiteActive = false
 
-local speedVal = 220
-local chunkVal = 18
+local speedVal = 310
+local chunkVal = 20
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
 
 local currentTween = nil
-local stepCounter = 0
-local phaseTimer = 0
-local isStraightPhase = false
+
+-- Biến cho logic trạng thái bay mới của Teleguiado (0: thẳng, 1: trái, 2: thẳng ngắn, 3: phải)
+local teleguiadoStepState = 0
+local stepTimer = 0
 
 local updateTeleguiadoUI = function() end
+local updateMonsterUI = function() end
 
 local function setTeleguiado(state)
     if teleguiadoActive == state then
@@ -47,12 +50,16 @@ local function setTeleguiado(state)
             currentTween = nil
         end
 
-        stepCounter = 0
-        phaseTimer = 0
-        isStraightPhase = false
+        teleguiadoStepState = 0
+        stepTimer = 0
     end
 
     updateTeleguiadoUI()
+end
+
+local function setMonsterParasite(state)
+    monsterParasiteActive = state
+    updateMonsterUI()
 end
 
 -- =================================================================
@@ -312,7 +319,7 @@ RunService.Stepped:Connect(function()
 end)
 
 -- =================================================================
--- 4. TELEGUIADO BAY TWEEN VỀ BASE
+-- 4. TELEGUIADO BAY TWEEN VỀ BASE (LOGIC MỚI: Thẳng -> Trái -> Thẳng -> Phải)
 -- =================================================================
 
 RunService.RenderStepped:Connect(function(deltaTime)
@@ -352,37 +359,41 @@ RunService.RenderStepped:Connect(function(deltaTime)
             return
         end
 
-        phaseTimer = phaseTimer + deltaTime
+        stepTimer = stepTimer + deltaTime
 
-        if not isStraightPhase and phaseTimer >= 1.0 then
-            isStraightPhase = true
-            phaseTimer = 0
-
-        elseif isStraightPhase and phaseTimer >= 0.5 then
-            isStraightPhase = false
-            phaseTimer = 0
+        -- Quản lý thời gian chuyển đổi các trạng thái:
+        -- State 0 (Bay thẳng): 0.5s
+        -- State 1 (Bay Z trái): 0.3s
+        -- State 2 (Bay thẳng ngắn): 0.1s
+        -- State 3 (Bay Z phải): 0.3s
+        if teleguiadoStepState == 0 and stepTimer >= 0.5 then
+            teleguiadoStepState = 1
+            stepTimer = 0
+        elseif teleguiadoStepState == 1 and stepTimer >= 0.3 then
+            teleguiadoStepState = 2
+            stepTimer = 0
+        elseif teleguiadoStepState == 2 and stepTimer >= 0.1 then
+            teleguiadoStepState = 3
+            stepTimer = 0
+        elseif teleguiadoStepState == 3 and stepTimer >= 0.3 then
+            teleguiadoStepState = 0
+            stepTimer = 0
         end
 
         local unitDir = mainDir.Unit
         local moveDir = unitDir
+        local perp = Vector3.new(-unitDir.Z, 0, unitDir.X).Unit
+        local offsetMagnitude = chunkVal / 10
 
-        if not isStraightPhase then
-            local perp = Vector3.new(
-                -unitDir.Z,
-                0,
-                unitDir.X
-            ).Unit
-
-            stepCounter = stepCounter + 1
-
-            local zWave =
-                math.sin(stepCounter * 0.35)
-                * (chunkVal / 10)
-
-            moveDir = (
-                unitDir
-                + perp * zWave
-            ).Unit
+        if teleguiadoStepState == 1 then
+            -- Lệch trái
+            moveDir = (unitDir - perp * offsetMagnitude).Unit
+        elseif teleguiadoStepState == 3 then
+            -- Lệch phải
+            moveDir = (unitDir + perp * offsetMagnitude).Unit
+        else
+            -- Bay thẳng (State 0 và State 2)
+            moveDir = unitDir
         end
 
         local moveDistance =
@@ -419,7 +430,149 @@ RunService.RenderStepped:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- 5. HITBOX EXPANDER
+-- 5. MONSTER PARASITE LOGIC (ĐI TÌM BAY THẲNG + NHÌN TỪ TRÊN XUỐNG ĐẤT)
+-- =================================================================
+
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+
+        if not monsterParasiteActive then
+            continue
+        end
+
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not char then return end
+
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            local areaSlots = workspace:FindFirstChild("AreaEggSlotsClient")
+            if not areaSlots then return end
+
+            local targetVisual = nil
+            for _, descendant in ipairs(areaSlots:GetDescendants()) do
+                if descendant.Name == "MonsterParasiteVisual" then
+                    targetVisual = descendant
+                    break
+                end
+            end
+
+            if not targetVisual then return end
+
+            local targetPos = nil
+            local parentObj = targetVisual.Parent
+
+            if parentObj then
+                if parentObj:IsA("BasePart") then
+                    targetPos = parentObj.Position
+                elseif parentObj:IsA("Attachment") then
+                    targetPos = parentObj.WorldPosition
+                elseif parentObj:IsA("Model") then
+                    targetPos = parentObj:GetPivot().Position
+                end
+            end
+
+            if not targetPos then return end
+
+            local finalTargetPos = targetPos + Vector3.new(0, 3, 0)
+            local reachedTarget = false
+            local connection
+            
+            -- Bay đi đến Monster (Bay thẳng tuyệt đối)
+            connection = RunService.RenderStepped:Connect(function(deltaTime)
+                if not monsterParasiteActive then
+                    connection:Disconnect()
+                    return
+                end
+
+                pcall(function()
+                    local currentPos = hrp.Position
+                    local mainDir = finalTargetPos - currentPos
+                    local distance = mainDir.Magnitude
+
+                    if distance <= 2 then
+                        reachedTarget = true
+                        connection:Disconnect()
+                        return
+                    end
+
+                    local moveDir = mainDir.Unit
+                    local moveDistance = speedVal * deltaTime
+                    local nextPos = currentPos + (moveDir * moveDistance)
+
+                    if currentTween then
+                        pcall(function() currentTween:Cancel() end)
+                    end
+
+                    local tweenInfo = TweenInfo.new(deltaTime, Enum.EasingStyle.Linear)
+                    currentTween = TweenService:Create(hrp, tweenInfo, {
+                        CFrame = CFrame.new(nextPos, nextPos + moveDir)
+                    })
+                    currentTween:Play()
+                end)
+            end)
+
+            while not reachedTarget and monsterParasiteActive do
+                task.wait(0.05)
+            end
+
+            if not monsterParasiteActive then
+                if connection then connection:Disconnect() end
+                return
+            end
+
+            -- Đặt góc nhìn từ trên xuống đất (Top-down view)
+            pcall(function()
+                local camera = workspace.CurrentCamera
+                if camera and hrp then
+                    camera.CameraType = Enum.CameraType.Scriptable
+                    camera.CFrame = CFrame.new(hrp.Position + Vector3.new(0, 15, 0), hrp.Position)
+                end
+            end)
+
+            for _, prompt in ipairs(workspace:GetDescendants()) do
+                if prompt:IsA("ProximityPrompt") then
+                    local pPos = getPromptPosition(prompt)
+                    if pPos and (hrp.Position - pPos).Magnitude <= 15 then
+                        prompt.MaxActivationDistance = 1
+                        bypassPrompt(prompt)
+                    end
+                end
+            end
+
+            task.wait(0.3)
+
+            for prompt, _ in pairs(shownPrompts) do
+                if prompt and prompt.Enabled then
+                    local pPos = getPromptPosition(prompt)
+                    if pPos and (hrp.Position - pPos).Magnitude <= 15 then
+                        triggerPrompt(prompt)
+                    end
+                end
+            end
+
+            -- Trả lại camera về chế độ thông thường của game
+            pcall(function()
+                local camera = workspace.CurrentCamera
+                if camera then
+                    camera.CameraType = Enum.CameraType.Custom
+                    camera.CameraSubject = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                end
+            end)
+
+            -- Sau khi xong, bật Teleguiado để bay về base bằng logic Zig Zag mới
+            setTeleguiado(true)
+
+            monsterParasiteActive = false
+            updateMonsterUI()
+        end)
+    end
+end)
+
+-- =================================================================
+-- 6. HITBOX EXPANDER
 -- =================================================================
 
 local function resetHitboxes()
@@ -482,7 +635,7 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- 6. ANTI TRAP
+-- 7. ANTI TRAP
 -- =================================================================
 
 local trapESP = {}
@@ -631,7 +784,7 @@ workspace.DescendantAdded:Connect(function(obj)
 end)
 
 -- =================================================================
--- 7. GIAO DIỆN DRAGON NOVA HUB
+-- 8. GIAO DIỆN DRAGON NOVA HUB
 -- =================================================================
 
 local function createHubUI()
@@ -661,17 +814,13 @@ local function createHubUI()
         or CoreGui
         or LocalPlayer:WaitForChild("PlayerGui")
 
-    -- =============================================================
-    -- MAIN FRAME
-    -- =============================================================
-
     local mainFrame = Instance.new("Frame")
 
     mainFrame.Name = "MainFrame"
     mainFrame.Parent = screenGui
 
     mainFrame.Size =
-        UDim2.new(0, 240, 0, 260)
+        UDim2.new(0, 240, 0, 300)
 
     mainFrame.Position =
         UDim2.new(0.05, 0, 0.2, 0)
@@ -692,10 +841,6 @@ local function createHubUI()
         Color3.fromRGB(0, 200, 255)
 
     mainStroke.Thickness = 2
-
-    -- =============================================================
-    -- TITLE
-    -- =============================================================
 
     local titleLabel =
         Instance.new("TextLabel")
@@ -723,10 +868,6 @@ local function createHubUI()
         Enum.TextXAlignment.Left
 
     titleLabel.BackgroundTransparency = 1
-
-    -- =============================================================
-    -- MINIMIZE
-    -- =============================================================
 
     local btnMin =
         Instance.new("TextButton")
@@ -801,10 +942,6 @@ local function createHubUI()
         mainFrame.Visible = true
         minIcon.Visible = false
     end)
-
-    -- =============================================================
-    -- SLIDER
-    -- =============================================================
 
     local function createSlider(
         yPos,
@@ -960,10 +1097,6 @@ local function createHubUI()
         end)
     end
 
-    -- =============================================================
-    -- SLIDERS
-    -- =============================================================
-
     createSlider(
         35,
         "⚡ Tween Speed",
@@ -985,10 +1118,6 @@ local function createHubUI()
             chunkVal = val
         end
     )
-
-    -- =============================================================
-    -- BUTTON
-    -- =============================================================
 
     local function createGridButton(
         xRel,
@@ -1062,10 +1191,6 @@ local function createHubUI()
         return btn
     end
 
-    -- =============================================================
-    -- TELEGUIADO
-    -- =============================================================
-
     local btnTele =
         createGridButton(
             0.05,
@@ -1099,10 +1224,6 @@ local function createHubUI()
             or Color3.fromRGB(255, 75, 75)
     end
 
-    -- =============================================================
-    -- AUTO STEAL
-    -- =============================================================
-
     createGridButton(
         0.50,
         120,
@@ -1117,10 +1238,6 @@ local function createHubUI()
             return autoSteal
         end
     )
-
-    -- =============================================================
-    -- ANTI STUN
-    -- =============================================================
 
     createGridButton(
         0.05,
@@ -1137,10 +1254,6 @@ local function createHubUI()
         end
     )
 
-    -- =============================================================
-    -- AUTO PICK
-    -- =============================================================
-
     createGridButton(
         0.50,
         165,
@@ -1155,10 +1268,6 @@ local function createHubUI()
             return autoEggActive
         end
     )
-
-    -- =============================================================
-    -- HITBOX
-    -- =============================================================
 
     createGridButton(
         0.05,
@@ -1179,10 +1288,6 @@ local function createHubUI()
         end
     )
 
-    -- =============================================================
-    -- ANTI TRAP
-    -- =============================================================
-
     createGridButton(
         0.50,
         210,
@@ -1198,6 +1303,23 @@ local function createHubUI()
             return antiTrapActive
         end
     )
+
+    local btnMonster = createGridButton(
+        0.05,
+        255,
+        0.90,
+        "👾 Monster Parasite",
+        monsterParasiteActive,
+        function()
+            setMonsterParasite(not monsterParasiteActive)
+            return monsterParasiteActive
+        end
+    )
+
+    updateMonsterUI = function()
+        btnMonster.Text = "👾 Monster Parasite" .. (monsterParasiteActive and ": ON" or ": OFF")
+        btnMonster.TextColor3 = monsterParasiteActive and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 75, 75)
+    end
 end
 
 -- =================================================================
