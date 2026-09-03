@@ -8,7 +8,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local CoreGui = game:GetService("CoreGui")
 local LocalPlayer = Players.LocalPlayer
 
--- States
+-- States (Đã tự động bật Anti Stun, Anti Trap, Hitbox)
 local teleguiadoActive = false
 local autoSteal = false
 local antiStun = true
@@ -16,9 +16,9 @@ local autoEggActive = false
 local hitboxActive = true
 local antiTrapActive = true
 local monsterScanActive = false
-local zigzagMode = false
+local zigzagMode = false -- Mặc định bay thẳng
 
--- Configs
+-- Configs (Mặc định Speed 300 / Chunk 10)
 local speedVal = 300
 local chunkVal = 10
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
@@ -228,18 +228,11 @@ local function chunkTweenTo(targetCFrame)
 
     local steps = math.max(1, math.floor(totalDistance / chunkVal))
     local direction = (targetPos - startPos).Unit
-    local rightVec = Vector3.new(-direction.Z, 0, direction.X).Unit
 
     for i = 1, steps do
         if not monsterScanActive and not teleguiadoActive then break end
 
         local nextPos = startPos + (direction * (i * chunkVal))
-
-        if zigzagMode and i < steps then
-            local offsetMagnitude = (i % 2 == 1) and 6 or -6
-            nextPos = nextPos + (rightVec * offsetMagnitude)
-        end
-
         if i == steps then nextPos = targetPos end
 
         local stepDistance = (nextPos - hrp.Position).Magnitude
@@ -606,7 +599,7 @@ local function createHubUI()
     infoContent.TextYAlignment = Enum.TextYAlignment.Top
     infoContent.TextWrapped = true
     infoContent.BackgroundTransparency = 1
-    infoContent.Text = [[• Teleguiado: Bay thẳng/Ziczac về Base.
+    infoContent.Text = [[• Teleguiado: Bay thẳng về Base.
 • Auto Steal: Kích hoạt Prompt xung quanh.
 • Auto Pick: Tự động nhặt trứng/vật phẩm.
 • Monster Scan: Tìm MonsterParasite gần nhất, hạ Cam 90°, đặt tầm Prompt = 1 stud & chở về Base.
@@ -673,16 +666,7 @@ local function createHubUI()
         return antiTrapActive 
     end)
 
-    local btnZigzag = createGridButtonInPanel(settingsPanel, 0.06, 78, 0.88, "Bay: Thẳng 🎯", zigzagMode, function()
-        zigzagMode = not zigzagMode
-        return zigzagMode
-    end)
-    
-    btnZigzag.MouseButton1Click:Connect(function()
-        btnZigzag.Text = zigzagMode and "Bay: Zig-Zag ⚡" or "Bay: Thẳng 🎯"
-    end)
-
-    createGridButtonInPanel(settingsPanel, 0.06, 116, 0.88, "Hitbox (15x15)", hitboxActive, function() 
+    createGridButtonInPanel(settingsPanel, 0.06, 78, 0.88, "Hitbox (15x15)", hitboxActive, function() 
         hitboxActive = not hitboxActive 
         if not hitboxActive then
             pcall(function()
@@ -755,8 +739,8 @@ local function createHubUI()
         end)
     end
 
-    createSlider(160, "⚡ Tween Speed", 10, 600, speedVal, function(val) speedVal = val end)
-    createSlider(210, "🌀 Chunk (S+Z)", 2, 100, chunkVal, function(val) chunkVal = val end)
+    createSlider(125, "⚡ Tween Speed", 10, 600, speedVal, function(val) speedVal = val end)
+    createSlider(175, "🌀 Chunk", 2, 100, chunkVal, function(val) chunkVal = val end)
 
     -- MAIN MENU BUTTONS
     local function createMainGridButton(xRel, yPos, wRel, text, defaultState, callback)
