@@ -485,6 +485,44 @@ local function createHubUI()
     screenGui.DisplayOrder = 999999
     screenGui.Parent = parentFolder
 
+    -- SPEED DISPLAY (GÓC TRÊN BÊN PHẢI MÀN HÌNH)
+    local speedDisplayLabel = Instance.new("TextLabel")
+    speedDisplayLabel.Name = "SpeedDisplay"
+    speedDisplayLabel.Parent = screenGui
+    speedDisplayLabel.Size = UDim2.new(0, 160, 0, 30)
+    speedDisplayLabel.Position = UDim2.new(1, -170, 0, 10)
+    speedDisplayLabel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    speedDisplayLabel.BackgroundTransparency = 0.2
+    speedDisplayLabel.Text = "Speed: 0"
+    speedDisplayLabel.Font = Enum.Font.GothamBold
+    speedDisplayLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+    speedDisplayLabel.TextSize = 14
+    speedDisplayLabel.TextXAlignment = Enum.TextXAlignment.Center
+
+    local speedCorner = Instance.new("UICorner", speedDisplayLabel)
+    speedCorner.CornerRadius = UDim.new(0, 8)
+
+    local speedStroke = Instance.new("UIStroke", speedDisplayLabel)
+    speedStroke.Color = Color3.fromRGB(0, 220, 255)
+    speedStroke.Thickness = 1.5
+
+    task.spawn(function()
+        local leaderstats = LocalPlayer:WaitForChild("leaderstats", 10)
+        if leaderstats then
+            local speedStat = leaderstats:WaitForChild("Speed", 10)
+            if speedStat then
+                speedDisplayLabel.Text = "Speed: " .. tostring(speedStat.Value)
+                speedStat.Changed:Connect(function(newVal)
+                    speedDisplayLabel.Text = "Speed: " .. tostring(newVal)
+                end)
+            else
+                speedDisplayLabel.Text = "Speed: N/A"
+            end
+        else
+            speedDisplayLabel.Text = "Speed: N/A"
+        end
+    end)
+
     -- MAIN FRAME
     local mainFrame = Instance.new("Frame")
     mainFrame.Name = "MainFrame"
@@ -505,7 +543,7 @@ local function createHubUI()
     titleLabel.Parent = mainFrame
     titleLabel.Size = UDim2.new(0.5, 0, 0, 24)
     titleLabel.Position = UDim2.new(0.06, 0, 0, 8)
-    titleLabel.Text = "🐉 DRAGON NOVA"
+    titleLabel.Text = "★ DRAGON NOVA"
     titleLabel.Font = Enum.Font.GothamBold
     titleLabel.TextSize = 14
     titleLabel.TextColor3 = Color3.fromRGB(0, 220, 255)
@@ -514,25 +552,36 @@ local function createHubUI()
 
     local btnInfo = Instance.new("TextButton")
     btnInfo.Parent = mainFrame
-    btnInfo.Size = UDim2.new(0, 65, 0, 18)
+    btnInfo.Size = UDim2.new(0, 55, 0, 18)
     btnInfo.Position = UDim2.new(0.06, 0, 0, 32)
     btnInfo.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
     btnInfo.Text = "ⓘ Chi Tiết"
     btnInfo.Font = Enum.Font.GothamBold
     btnInfo.TextColor3 = Color3.fromRGB(0, 220, 255)
-    btnInfo.TextSize = 10
+    btnInfo.TextSize = 9
     Instance.new("UICorner", btnInfo).CornerRadius = UDim.new(0, 6)
 
     local btnSettings = Instance.new("TextButton")
     btnSettings.Parent = mainFrame
-    btnSettings.Size = UDim2.new(0, 65, 0, 18)
-    btnSettings.Position = UDim2.new(0.35, 0, 0, 32)
+    btnSettings.Size = UDim2.new(0, 55, 0, 18)
+    btnSettings.Position = UDim2.new(0.31, 0, 0, 32)
     btnSettings.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
     btnSettings.Text = "⚙ Settings"
     btnSettings.Font = Enum.Font.GothamBold
     btnSettings.TextColor3 = Color3.fromRGB(0, 220, 255)
-    btnSettings.TextSize = 10
+    btnSettings.TextSize = 9
     Instance.new("UICorner", btnSettings).CornerRadius = UDim.new(0, 6)
+
+    local btnLennon = Instance.new("TextButton")
+    btnLennon.Parent = mainFrame
+    btnLennon.Size = UDim2.new(0, 55, 0, 18)
+    btnLennon.Position = UDim2.new(0.56, 0, 0, 32)
+    btnLennon.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+    btnLennon.Text = "★ Lennon"
+    btnLennon.Font = Enum.Font.GothamBold
+    btnLennon.TextColor3 = Color3.fromRGB(255, 215, 0)
+    btnLennon.TextSize = 9
+    Instance.new("UICorner", btnLennon).CornerRadius = UDim.new(0, 6)
 
     local statusBox = Instance.new("Frame")
     statusBox.Parent = mainFrame
@@ -607,7 +656,13 @@ local function createHubUI()
 • Hitbox: Phóng to Hitbox kẻ địch (15x15).
 • Anti Trap: Xóa bẫy trong __DEBRIS.]]
 
-    btnInfo.MouseButton1Click:Connect(function() infoPanel.Visible = not infoPanel.Visible end)
+    btnInfo.MouseButton1Click:Connect(function() 
+        infoPanel.Visible = not infoPanel.Visible 
+        if infoPanel.Visible then
+            settingsPanel.Visible = false
+            lennonPanel.Visible = false
+        end
+    end)
 
     -- SETTINGS PANEL
     local settingsPanel = Instance.new("Frame")
@@ -633,7 +688,66 @@ local function createHubUI()
     setsTitle.TextColor3 = Color3.fromRGB(255, 165, 0)
     setsTitle.BackgroundTransparency = 1
 
-    btnSettings.MouseButton1Click:Connect(function() settingsPanel.Visible = not settingsPanel.Visible end)
+    btnSettings.MouseButton1Click:Connect(function() 
+        settingsPanel.Visible = not settingsPanel.Visible 
+        if settingsPanel.Visible then
+            infoPanel.Visible = false
+            lennonPanel.Visible = false
+        end
+    end)
+
+    -- LENNON PANEL
+    local lennonPanel = Instance.new("Frame")
+    lennonPanel.Parent = screenGui
+    lennonPanel.Size = UDim2.new(0, 250, 0, 310)
+    lennonPanel.Position = mainFrame.Position + UDim2.new(0, 260, 0, 0)
+    lennonPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    lennonPanel.Visible = false
+    lennonPanel.Active = true
+    lennonPanel.Draggable = true
+    Instance.new("UICorner", lennonPanel).CornerRadius = UDim.new(0, 12)
+    local lennonStroke = Instance.new("UIStroke", lennonPanel)
+    lennonStroke.Color = Color3.fromRGB(255, 215, 0)
+    lennonStroke.Thickness = 2
+
+    local lennonTitle = Instance.new("TextLabel")
+    lennonTitle.Parent = lennonPanel
+    lennonTitle.Size = UDim2.new(1, 0, 0, 35)
+    lennonTitle.Position = UDim2.new(0, 0, 0, 5)
+    lennonTitle.Text = "★ LENNON MENU"
+    lennonTitle.Font = Enum.Font.GothamBold
+    lennonTitle.TextSize = 13
+    lennonTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
+    lennonTitle.BackgroundTransparency = 1
+
+    local btnLennonHubVip = Instance.new("TextButton")
+    btnLennonHubVip.Parent = lennonPanel
+    btnLennonHubVip.Size = UDim2.new(0.88, 0, 0, 40)
+    btnLennonHubVip.Position = UDim2.new(0.06, 0, 0, 50)
+    btnLennonHubVip.BackgroundColor3 = Color3.fromRGB(35, 30, 15)
+    btnLennonHubVip.Text = "★ Lennon Hub Vip"
+    btnLennonHubVip.Font = Enum.Font.GothamBold
+    btnLennonHubVip.TextColor3 = Color3.fromRGB(255, 215, 0)
+    btnLennonHubVip.TextSize = 13
+    Instance.new("UICorner", btnLennonHubVip).CornerRadius = UDim.new(0, 8)
+
+    local lennonBtnStroke = Instance.new("UIStroke", btnLennonHubVip)
+    lennonBtnStroke.Color = Color3.fromRGB(255, 215, 0)
+    lennonBtnStroke.Thickness = 1.2
+
+    btnLennonHubVip.MouseButton1Click:Connect(function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/lennonxscripts/lennonhub/main/stealaegg.lua"))()
+        end)
+    end)
+
+    btnLennon.MouseButton1Click:Connect(function() 
+        lennonPanel.Visible = not lennonPanel.Visible 
+        if lennonPanel.Visible then
+            infoPanel.Visible = false
+            settingsPanel.Visible = false
+        end
+    end)
 
     local function createGridButtonInPanel(parentPanel, xRel, yPos, wRel, text, defaultState, callback)
         local btn = Instance.new("TextButton")
@@ -816,7 +930,7 @@ local function createHubUI()
     minIcon.Size = UDim2.new(0, 45, 0, 45)
     minIcon.Position = UDim2.new(0.02, 0, 0.45, 0)
     minIcon.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    minIcon.Text = "🐉"
+    minIcon.Text = "★"
     minIcon.Font = Enum.Font.GothamBold
     minIcon.TextSize = 22
     minIcon.Visible = false
@@ -831,6 +945,7 @@ local function createHubUI()
         mainFrame.Visible = false 
         infoPanel.Visible = false
         settingsPanel.Visible = false
+        lennonPanel.Visible = false
         minIcon.Visible = true 
     end)
     minIcon.MouseButton1Click:Connect(function() 
