@@ -1,4 +1,4 @@
--- Delta Executor: Dragon Nova Hub v25.3 (Distance = 25 Studs + Monster MaxDistance = 1 + Clean UI)
+-- Delta Executor: Dragon Nova Hub v25.3 (Distance = 25 Studs + Monster MaxDistance = 1 + Server Hop + Clean UI)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -6,6 +6,8 @@ local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
 local CoreGui = game:GetService("CoreGui")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
 -- States (Đã tự động bật Anti Stun, Anti Trap, Hitbox)
@@ -16,7 +18,9 @@ local autoEggActive = false
 local hitboxActive = true
 local antiTrapActive = true
 local monsterScanActive = false
-local zigzagMode = false -- Mặc định bay thẳng
+
+-- Server Hop Configs
+local targetPlayerCount = 0
 
 -- Configs (Mặc định Speed 300 / Chunk 10)
 local speedVal = 300
@@ -470,6 +474,62 @@ local function getSafeUIParent()
     return target
 end
 
+-- SERVER HOP FUNCTION WITH EXACT PLAYER COUNT
+local function joinServerWithPlayers(reqPlayers)
+    updateStatus("Đang quét Server (" .. tostring(reqPlayers) .. " player)...")
+    local placeId = game.PlaceId
+    local cursor = ""
+    local foundServer = nil
+
+    pcall(function()
+        repeat
+            local url = "https://games.roblox.com/v1/games/" .. tostring(placeId) .. "/servers/Public?sortOrder=Asc&limit=100"
+            if cursor ~= "" then url = url .. "&cursor=" .. cursor end
+            
+            local req = (syn and syn.request) or (http and http.request) or http_request or request
+            if not req then
+                updateStatus("Executor không hỗ trợ HTTP Request!")
+                return
+            end
+
+            local res = req({Url = url, Method = "GET"})
+            if res and res.StatusCode == 200 then
+                local data = HttpService:JSONDecode(res.Body)
+                if data and data.data then
+                    for _, s in ipairs(data.data) do
+                        if s.playing == reqPlayers and s.id ~= game.JobId then
+                            foundServer = s
+                            break
+                        end
+                    end
+                    cursor = data.nextPageCursor or ""
+                else
+                    break
+                end
+            else
+                break
+            end
+            task.wait(0.2)
+        until foundServer or not cursor or cursor == ""
+    end)
+
+    if foundServer then
+        updateStatus("Đang tham gia server...")
+        pcall(function()
+            local starterGui = game:GetService("StarterGui")
+            starterGui:SetCore("SendNotification", {
+                Title = "★ Dragon Nova Hub",
+                Text = "Join server-id:" .. tostring(foundServer.id) .. " - player:" .. tostring(foundServer.playing),
+                Duration = 6
+            })
+        end)
+        task.wait(0.5)
+        TeleportService:TeleportToPlaceInstance(placeId, foundServer.id, LocalPlayer)
+    else
+        updateStatus("Không tìm thấy Server có " .. tostring(reqPlayers) .. " player!")
+    end
+end
+
 local function createHubUI()
     local parentFolder = getSafeUIParent()
     if not parentFolder then return end
@@ -550,16 +610,16 @@ local function createHubUI()
     titleLabel.TextXAlignment = Enum.TextXAlignment.Left
     titleLabel.BackgroundTransparency = 1
 
-    local btnInfo = Instance.new("TextButton")
-    btnInfo.Parent = mainFrame
-    btnInfo.Size = UDim2.new(0, 55, 0, 18)
-    btnInfo.Position = UDim2.new(0.06, 0, 0, 32)
-    btnInfo.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
-    btnInfo.Text = "ⓘ Chi Tiết"
-    btnInfo.Font = Enum.Font.GothamBold
-    btnInfo.TextColor3 = Color3.fromRGB(0, 220, 255)
-    btnInfo.TextSize = 9
-    Instance.new("UICorner", btnInfo).CornerRadius = UDim.new(0, 6)
+    local btnServer = Instance.new("TextButton")
+    btnServer.Parent = mainFrame
+    btnServer.Size = UDim2.new(0, 55, 0, 18)
+    btnServer.Position = UDim2.new(0.06, 0, 0, 32)
+    btnServer.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
+    btnServer.Text = "Server"
+    btnServer.Font = Enum.Font.GothamBold
+    btnServer.TextColor3 = Color3.fromRGB(0, 220, 255)
+    btnServer.TextSize = 9
+    Instance.new("UICorner", btnServer).CornerRadius = UDim.new(0, 6)
 
     local btnSettings = Instance.new("TextButton")
     btnSettings.Parent = mainFrame
@@ -606,59 +666,109 @@ local function createHubUI()
         if statusLabel then statusLabel.Text = text end
     end
 
-    -- INFO PANEL
-    local infoPanel = Instance.new("Frame")
-    infoPanel.Parent = screenGui
-    infoPanel.Size = UDim2.new(0, 260, 0, 310)
-    infoPanel.Position = mainFrame.Position + UDim2.new(0, 260, 0, 0)
-    infoPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    infoPanel.Visible = false
-    infoPanel.Active = true
-    infoPanel.Draggable = true
-    Instance.new("UICorner", infoPanel).CornerRadius = UDim.new(0, 12)
-    local infoStroke = Instance.new("UIStroke", infoPanel)
-    infoStroke.Color = Color3.fromRGB(0, 220, 255)
-    infoStroke.Thickness = 2
+    -- SERVER PANEL
+    local serverPanel = Instance.new("Frame")
+    serverPanel.Parent = screenGui
+    serverPanel.Size = UDim2.new(0, 250, 0, 310)
+    serverPanel.Position = mainFrame.Position + UDim2.new(0, 260, 0, 0)
+    serverPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    serverPanel.Visible = false
+    serverPanel.Active = true
+    serverPanel.Draggable = true
+    Instance.new("UICorner", serverPanel).CornerRadius = UDim.new(0, 12)
+    local serverStroke = Instance.new("UIStroke", serverPanel)
+    serverStroke.Color = Color3.fromRGB(0, 220, 255)
+    serverStroke.Thickness = 2
 
-    local infoTitle = Instance.new("TextLabel")
-    infoTitle.Parent = infoPanel
-    infoTitle.Size = UDim2.new(1, 0, 0, 35)
-    infoTitle.Position = UDim2.new(0, 0, 0, 5)
-    infoTitle.Text = "📖 HƯỚNG DẪN CHỨC NĂNG"
-    infoTitle.Font = Enum.Font.GothamBold
-    infoTitle.TextSize = 13
-    infoTitle.TextColor3 = Color3.fromRGB(0, 220, 255)
-    infoTitle.BackgroundTransparency = 1
+    local serverTitle = Instance.new("TextLabel")
+    serverTitle.Parent = serverPanel
+    serverTitle.Size = UDim2.new(1, 0, 0, 35)
+    serverTitle.Position = UDim2.new(0, 0, 0, 5)
+    serverTitle.Text = "🌐 TÌM SERVER"
+    serverTitle.Font = Enum.Font.GothamBold
+    serverTitle.TextSize = 13
+    serverTitle.TextColor3 = Color3.fromRGB(0, 220, 255)
+    serverTitle.BackgroundTransparency = 1
 
-    local infoScrolling = Instance.new("ScrollingFrame")
-    infoScrolling.Parent = infoPanel
-    infoScrolling.Size = UDim2.new(0.9, 0, 0, 255)
-    infoScrolling.Position = UDim2.new(0.05, 0, 0, 40)
-    infoScrolling.BackgroundTransparency = 1
-    infoScrolling.CanvasSize = UDim2.new(0, 0, 0, 380)
-    infoScrolling.ScrollBarThickness = 4
+    -- BỘ CHỈNH SỐ NGƯỜI CHƠI ( - 0 + )
+    local counterFrame = Instance.new("Frame")
+    counterFrame.Parent = serverPanel
+    counterFrame.Size = UDim2.new(0.88, 0, 0, 45)
+    counterFrame.Position = UDim2.new(0.06, 0, 0, 55)
+    counterFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    Instance.new("UICorner", counterFrame).CornerRadius = UDim.new(0, 8)
+    local counterStroke = Instance.new("UIStroke", counterFrame)
+    counterStroke.Color = Color3.fromRGB(0, 180, 220)
+    counterStroke.Thickness = 1.2
 
-    local infoContent = Instance.new("TextLabel")
-    infoContent.Parent = infoScrolling
-    infoContent.Size = UDim2.new(1, 0, 1, 0)
-    infoContent.Font = Enum.Font.Gotham
-    infoContent.TextSize = 11
-    infoContent.TextColor3 = Color3.fromRGB(210, 210, 220)
-    infoContent.TextXAlignment = Enum.TextXAlignment.Left
-    infoContent.TextYAlignment = Enum.TextYAlignment.Top
-    infoContent.TextWrapped = true
-    infoContent.BackgroundTransparency = 1
-    infoContent.Text = [[• Teleguiado: Bay thẳng về Base.
-• Auto Steal: Kích hoạt Prompt xung quanh.
-• Auto Pick: Tự động nhặt trứng/vật phẩm.
-• Monster Scan: Tìm MonsterParasite gần nhất, hạ Cam 90°, đặt tầm Prompt = 1 stud & chở về Base.
-• Anti Stun: Chống khựng/Ragdoll/Văng.
-• Hitbox: Phóng to Hitbox kẻ địch (15x15).
-• Anti Trap: Xóa bẫy trong __DEBRIS.]]
+    local btnSub = Instance.new("TextButton")
+    btnSub.Parent = counterFrame
+    btnSub.Size = UDim2.new(0, 40, 1, 0)
+    btnSub.Position = UDim2.new(0, 0, 0, 0)
+    btnSub.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    btnSub.Text = "-"
+    btnSub.Font = Enum.Font.GothamBold
+    btnSub.TextColor3 = Color3.fromRGB(255, 80, 80)
+    btnSub.TextSize = 20
+    Instance.new("UICorner", btnSub).CornerRadius = UDim.new(0, 8)
 
-    btnInfo.MouseButton1Click:Connect(function() 
-        infoPanel.Visible = not infoPanel.Visible 
-        if infoPanel.Visible then
+    local playerCountLabel = Instance.new("TextLabel")
+    playerCountLabel.Parent = counterFrame
+    playerCountLabel.Size = UDim2.new(1, -80, 1, 0)
+    playerCountLabel.Position = UDim2.new(0, 40, 0, 0)
+    playerCountLabel.Text = "0"
+    playerCountLabel.Font = Enum.Font.GothamBold
+    playerCountLabel.TextColor3 = Color3.fromRGB(0, 255, 150)
+    playerCountLabel.TextSize = 18
+    playerCountLabel.BackgroundTransparency = 1
+
+    local btnAdd = Instance.new("TextButton")
+    btnAdd.Parent = counterFrame
+    btnAdd.Size = UDim2.new(0, 40, 1, 0)
+    btnAdd.Position = UDim2.new(1, -40, 0, 0)
+    btnAdd.BackgroundColor3 = Color3.fromRGB(30, 30, 45)
+    btnAdd.Text = "+"
+    btnAdd.Font = Enum.Font.GothamBold
+    btnAdd.TextColor3 = Color3.fromRGB(80, 255, 120)
+    btnAdd.TextSize = 20
+    Instance.new("UICorner", btnAdd).CornerRadius = UDim.new(0, 8)
+
+    btnSub.MouseButton1Click:Connect(function()
+        if targetPlayerCount > 0 then
+            targetPlayerCount = targetPlayerCount - 1
+            playerCountLabel.Text = tostring(targetPlayerCount)
+        end
+    end)
+
+    btnAdd.MouseButton1Click:Connect(function()
+        targetPlayerCount = targetPlayerCount + 1
+        playerCountLabel.Text = tostring(targetPlayerCount)
+    end)
+
+    -- NÚT THAM GIA SERVER (DẠNG NÚT BẤM THƯỜNG KHÔNG NGOẶC)
+    local btnJoinServer = Instance.new("TextButton")
+    btnJoinServer.Parent = serverPanel
+    btnJoinServer.Size = UDim2.new(0.88, 0, 0, 40)
+    btnJoinServer.Position = UDim2.new(0.06, 0, 0, 115)
+    btnJoinServer.BackgroundColor3 = Color3.fromRGB(0, 60, 45)
+    btnJoinServer.Text = "Tham Gia Server"
+    btnJoinServer.Font = Enum.Font.GothamBold
+    btnJoinServer.TextColor3 = Color3.fromRGB(0, 255, 150)
+    btnJoinServer.TextSize = 13
+    Instance.new("UICorner", btnJoinServer).CornerRadius = UDim.new(0, 8)
+    local joinStroke = Instance.new("UIStroke", btnJoinServer)
+    joinStroke.Color = Color3.fromRGB(0, 255, 150)
+    joinStroke.Thickness = 1.2
+
+    btnJoinServer.MouseButton1Click:Connect(function()
+        task.spawn(function()
+            joinServerWithPlayers(targetPlayerCount)
+        end)
+    end)
+
+    btnServer.MouseButton1Click:Connect(function() 
+        serverPanel.Visible = not serverPanel.Visible 
+        if serverPanel.Visible then
             settingsPanel.Visible = false
             lennonPanel.Visible = false
         end
@@ -691,7 +801,7 @@ local function createHubUI()
     btnSettings.MouseButton1Click:Connect(function() 
         settingsPanel.Visible = not settingsPanel.Visible 
         if settingsPanel.Visible then
-            infoPanel.Visible = false
+            serverPanel.Visible = false
             lennonPanel.Visible = false
         end
     end)
@@ -744,7 +854,7 @@ local function createHubUI()
     btnLennon.MouseButton1Click:Connect(function() 
         lennonPanel.Visible = not lennonPanel.Visible 
         if lennonPanel.Visible then
-            infoPanel.Visible = false
+            serverPanel.Visible = false
             settingsPanel.Visible = false
         end
     end)
@@ -943,7 +1053,7 @@ local function createHubUI()
 
     btnMin.MouseButton1Click:Connect(function() 
         mainFrame.Visible = false 
-        infoPanel.Visible = false
+        serverPanel.Visible = false
         settingsPanel.Visible = false
         lennonPanel.Visible = false
         minIcon.Visible = true 
