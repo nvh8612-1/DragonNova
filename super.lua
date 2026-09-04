@@ -1,4 +1,4 @@
--- Delta Executor: Dragon Nova Hub v25.3 (Distance = 25 Studs + Monster MaxDistance = 1 + Server Hop + Clean UI)
+-- Delta Executor: Dragon Nova Hub v25.3 (Distance = 25 Studs + Monster MaxDistance = 1 + Flexible Server Hop + Clean UI)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -474,15 +474,17 @@ local function getSafeUIParent()
     return target
 end
 
--- SERVER HOP FUNCTION WITH EXACT PLAYER COUNT
+-- SERVER HOP FUNCTION WITH FLEXIBLE SEARCH LOGIC
 local function joinServerWithPlayers(reqPlayers)
-    updateStatus("Đang quét Server (" .. tostring(reqPlayers) .. " player)...")
+    updateStatus("Đang quét Server (<= " .. tostring(reqPlayers) .. " player)...")
     local placeId = game.PlaceId
     local cursor = ""
     local foundServer = nil
 
     pcall(function()
+        local pageCount = 0
         repeat
+            pageCount = pageCount + 1
             local url = "https://games.roblox.com/v1/games/" .. tostring(placeId) .. "/servers/Public?sortOrder=Asc&limit=100"
             if cursor ~= "" then url = url .. "&cursor=" .. cursor end
             
@@ -497,7 +499,7 @@ local function joinServerWithPlayers(reqPlayers)
                 local data = HttpService:JSONDecode(res.Body)
                 if data and data.data then
                     for _, s in ipairs(data.data) do
-                        if s.playing == reqPlayers and s.id ~= game.JobId then
+                        if s.playing <= reqPlayers and s.playing < s.maxPlayers and s.id ~= game.JobId then
                             foundServer = s
                             break
                         end
@@ -510,7 +512,7 @@ local function joinServerWithPlayers(reqPlayers)
                 break
             end
             task.wait(0.2)
-        until foundServer or not cursor or cursor == ""
+        until foundServer or not cursor or cursor == "" or pageCount >= 5
     end)
 
     if foundServer then
@@ -526,7 +528,10 @@ local function joinServerWithPlayers(reqPlayers)
         task.wait(0.5)
         TeleportService:TeleportToPlaceInstance(placeId, foundServer.id, LocalPlayer)
     else
-        updateStatus("Không tìm thấy Server có " .. tostring(reqPlayers) .. " player!")
+        updateStatus("Chuyển server ngẫu nhiên...")
+        pcall(function()
+            TeleportService:Teleport(placeId, LocalPlayer)
+        end)
     end
 end
 
@@ -745,7 +750,7 @@ local function createHubUI()
         playerCountLabel.Text = tostring(targetPlayerCount)
     end)
 
-    -- NÚT THAM GIA SERVER (DẠNG NÚT BẤM THƯỜNG KHÔNG NGOẶC)
+    -- NÚT THAM GIA SERVER (KHÔNG CÓ NGOẶC)
     local btnJoinServer = Instance.new("TextButton")
     btnJoinServer.Parent = serverPanel
     btnJoinServer.Size = UDim2.new(0.88, 0, 0, 40)
