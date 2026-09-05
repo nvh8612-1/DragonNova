@@ -1,4 +1,4 @@
--- Delta Executor: Dragon Nova Hub v25.3 (Distance = 25 Studs + Monster MaxDistance = 1 + Flexible Server Hop + Clean UI)
+-- Delta Executor: Dragon Nova Hub v25.5 (Full Features + Spotify Tab Integration)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -10,7 +10,7 @@ local TeleportService = game:GetService("TeleportService")
 local HttpService = game:GetService("HttpService")
 local LocalPlayer = Players.LocalPlayer
 
--- States (Đã tự động bật Anti Stun, Anti Trap, Hitbox)
+-- States
 local teleguiadoActive = false
 local autoSteal = false
 local antiStun = true
@@ -22,7 +22,7 @@ local monsterScanActive = false
 -- Server Hop Configs
 local targetPlayerCount = 0
 
--- Configs (Mặc định Speed 300 / Chunk 10)
+-- Configs
 local speedVal = 300
 local chunkVal = 10
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
@@ -37,6 +37,24 @@ local updateTeleguiadoUI = function() end
 local function updateStatus(text)
     currentStatus = text
     updateStatusUI(text)
+end
+
+-- =================================================================
+-- SOUND SYSTEM (SPOTIFY)
+-- =================================================================
+local currentSound = Instance.new("Sound")
+currentSound.Name = "NovaSpotifySound"
+currentSound.Volume = 0.5
+currentSound.Looped = true
+currentSound.Parent = workspace
+
+local function playMusicById(soundId, songName)
+    pcall(function()
+        currentSound:Stop()
+        currentSound.SoundId = "rbxassetid://" .. tostring(soundId)
+        currentSound:Play()
+        updateStatus("🎵 Đang phát: " .. songName)
+    end)
 end
 
 -- =================================================================
@@ -550,7 +568,7 @@ local function createHubUI()
     screenGui.DisplayOrder = 999999
     screenGui.Parent = parentFolder
 
-    -- SPEED DISPLAY (GÓC TRÊN BÊN PHẢI MÀN HÌNH)
+    -- SPEED DISPLAY
     local speedDisplayLabel = Instance.new("TextLabel")
     speedDisplayLabel.Name = "SpeedDisplay"
     speedDisplayLabel.Parent = screenGui
@@ -617,36 +635,48 @@ local function createHubUI()
 
     local btnServer = Instance.new("TextButton")
     btnServer.Parent = mainFrame
-    btnServer.Size = UDim2.new(0, 55, 0, 18)
+    btnServer.Size = UDim2.new(0, 42, 0, 18)
     btnServer.Position = UDim2.new(0.06, 0, 0, 32)
     btnServer.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
     btnServer.Text = "Server"
     btnServer.Font = Enum.Font.GothamBold
     btnServer.TextColor3 = Color3.fromRGB(0, 220, 255)
-    btnServer.TextSize = 9
+    btnServer.TextSize = 8
     Instance.new("UICorner", btnServer).CornerRadius = UDim.new(0, 6)
 
     local btnSettings = Instance.new("TextButton")
     btnSettings.Parent = mainFrame
-    btnSettings.Size = UDim2.new(0, 55, 0, 18)
-    btnSettings.Position = UDim2.new(0.31, 0, 0, 32)
+    btnSettings.Size = UDim2.new(0, 48, 0, 18)
+    btnSettings.Position = UDim2.new(0.24, 0, 0, 32)
     btnSettings.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
     btnSettings.Text = "⚙ Settings"
     btnSettings.Font = Enum.Font.GothamBold
     btnSettings.TextColor3 = Color3.fromRGB(0, 220, 255)
-    btnSettings.TextSize = 9
+    btnSettings.TextSize = 8
     Instance.new("UICorner", btnSettings).CornerRadius = UDim.new(0, 6)
 
     local btnLennon = Instance.new("TextButton")
     btnLennon.Parent = mainFrame
-    btnLennon.Size = UDim2.new(0, 55, 0, 18)
-    btnLennon.Position = UDim2.new(0.56, 0, 0, 32)
+    btnLennon.Size = UDim2.new(0, 48, 0, 18)
+    btnLennon.Position = UDim2.new(0.45, 0, 0, 32)
     btnLennon.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
     btnLennon.Text = "★ Lennon"
     btnLennon.Font = Enum.Font.GothamBold
     btnLennon.TextColor3 = Color3.fromRGB(255, 215, 0)
-    btnLennon.TextSize = 9
+    btnLennon.TextSize = 8
     Instance.new("UICorner", btnLennon).CornerRadius = UDim.new(0, 6)
+
+    -- SPOTIFY TAB
+    local btnSpotifyTab = Instance.new("TextButton")
+    btnSpotifyTab.Parent = mainFrame
+    btnSpotifyTab.Size = UDim2.new(0, 58, 0, 18)
+    btnSpotifyTab.Position = UDim2.new(0.66, 0, 0, 32)
+    btnSpotifyTab.BackgroundColor3 = Color3.fromRGB(20, 45, 25)
+    btnSpotifyTab.Text = "♫ Spotify ♫"
+    btnSpotifyTab.Font = Enum.Font.GothamBold
+    btnSpotifyTab.TextColor3 = Color3.fromRGB(30, 215, 96)
+    btnSpotifyTab.TextSize = 8
+    Instance.new("UICorner", btnSpotifyTab).CornerRadius = UDim.new(0, 6)
 
     local statusBox = Instance.new("Frame")
     statusBox.Parent = mainFrame
@@ -695,7 +725,6 @@ local function createHubUI()
     serverTitle.TextColor3 = Color3.fromRGB(0, 220, 255)
     serverTitle.BackgroundTransparency = 1
 
-    -- BỘ CHỈNH SỐ NGƯỜI CHƠI ( - 0 + )
     local counterFrame = Instance.new("Frame")
     counterFrame.Parent = serverPanel
     counterFrame.Size = UDim2.new(0.88, 0, 0, 45)
@@ -750,7 +779,6 @@ local function createHubUI()
         playerCountLabel.Text = tostring(targetPlayerCount)
     end)
 
-    -- NÚT THAM GIA SERVER (KHÔNG CÓ NGOẶC)
     local btnJoinServer = Instance.new("TextButton")
     btnJoinServer.Parent = serverPanel
     btnJoinServer.Size = UDim2.new(0.88, 0, 0, 40)
@@ -769,14 +797,6 @@ local function createHubUI()
         task.spawn(function()
             joinServerWithPlayers(targetPlayerCount)
         end)
-    end)
-
-    btnServer.MouseButton1Click:Connect(function() 
-        serverPanel.Visible = not serverPanel.Visible 
-        if serverPanel.Visible then
-            settingsPanel.Visible = false
-            lennonPanel.Visible = false
-        end
     end)
 
     -- SETTINGS PANEL
@@ -802,14 +822,6 @@ local function createHubUI()
     setsTitle.TextSize = 13
     setsTitle.TextColor3 = Color3.fromRGB(255, 165, 0)
     setsTitle.BackgroundTransparency = 1
-
-    btnSettings.MouseButton1Click:Connect(function() 
-        settingsPanel.Visible = not settingsPanel.Visible 
-        if settingsPanel.Visible then
-            serverPanel.Visible = false
-            lennonPanel.Visible = false
-        end
-    end)
 
     -- LENNON PANEL
     local lennonPanel = Instance.new("Frame")
@@ -856,11 +868,203 @@ local function createHubUI()
         end)
     end)
 
+    -- SPOTIFY PANEL
+    local spotifyPanel = Instance.new("Frame")
+    spotifyPanel.Parent = screenGui
+    spotifyPanel.Size = UDim2.new(0, 250, 0, 310)
+    spotifyPanel.Position = mainFrame.Position + UDim2.new(0, 260, 0, 0)
+    spotifyPanel.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    spotifyPanel.Visible = false
+    spotifyPanel.Active = true
+    spotifyPanel.Draggable = true
+    Instance.new("UICorner", spotifyPanel).CornerRadius = UDim.new(0, 12)
+
+    local spotifyStroke = Instance.new("UIStroke", spotifyPanel)
+    spotifyStroke.Color = Color3.fromRGB(30, 215, 96)
+    spotifyStroke.Thickness = 2
+
+    local spotifyTitle = Instance.new("TextLabel")
+    spotifyTitle.Parent = spotifyPanel
+    spotifyTitle.Size = UDim2.new(1, 0, 0, 30)
+    spotifyTitle.Position = UDim2.new(0, 0, 0, 5)
+    spotifyTitle.Text = "♫ SPOTIFY PLAYER ♫"
+    spotifyTitle.Font = Enum.Font.GothamBold
+    spotifyTitle.TextSize = 13
+    spotifyTitle.TextColor3 = Color3.fromRGB(30, 215, 96)
+    spotifyTitle.BackgroundTransparency = 1
+
+    local songCtrlFrame = Instance.new("Frame")
+    songCtrlFrame.Parent = spotifyPanel
+    songCtrlFrame.Size = UDim2.new(0.88, 0, 0, 32)
+    songCtrlFrame.Position = UDim2.new(0.06, 0, 0, 40)
+    songCtrlFrame.BackgroundColor3 = Color3.fromRGB(22, 22, 30)
+    Instance.new("UICorner", songCtrlFrame).CornerRadius = UDim.new(0, 8)
+
+    local btnPrev = Instance.new("TextButton")
+    btnPrev.Parent = songCtrlFrame
+    btnPrev.Size = UDim2.new(0, 30, 1, 0)
+    btnPrev.Text = "←"
+    btnPrev.Font = Enum.Font.GothamBold
+    btnPrev.TextColor3 = Color3.fromRGB(30, 215, 96)
+    btnPrev.TextSize = 16
+    btnPrev.BackgroundTransparency = 1
+
+    local songNameLbl = Instance.new("TextLabel")
+    songNameLbl.Parent = songCtrlFrame
+    songNameLbl.Size = UDim2.new(1, -60, 1, 0)
+    songNameLbl.Position = UDim2.new(0, 30, 0, 0)
+    songNameLbl.Text = "_ThonRemix_"
+    songNameLbl.Font = Enum.Font.GothamBold
+    songNameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
+    songNameLbl.TextSize = 11
+    songNameLbl.BackgroundTransparency = 1
+
+    local btnNext = Instance.new("TextButton")
+    btnNext.Parent = songCtrlFrame
+    btnNext.Size = UDim2.new(0, 30, 1, 0)
+    btnNext.Position = UDim2.new(1, -30, 0, 0)
+    btnNext.Text = "→"
+    btnNext.Font = Enum.Font.GothamBold
+    btnNext.TextColor3 = Color3.fromRGB(30, 215, 96)
+    btnNext.TextSize = 16
+    btnNext.BackgroundTransparency = 1
+
+    local volContainer = Instance.new("Frame")
+    volContainer.Parent = spotifyPanel
+    volContainer.Size = UDim2.new(0.88, 0, 0, 35)
+    volContainer.Position = UDim2.new(0.06, 0, 0, 78)
+    volContainer.BackgroundTransparency = 1
+
+    local volLbl = Instance.new("TextLabel")
+    volLbl.Parent = volContainer
+    volLbl.Size = UDim2.new(1, 0, 0, 14)
+    volLbl.Text = "Volume: 50%"
+    volLbl.Font = Enum.Font.GothamBold
+    volLbl.TextColor3 = Color3.fromRGB(200, 200, 210)
+    volLbl.TextSize = 10
+    volLbl.TextXAlignment = Enum.TextXAlignment.Left
+    volLbl.BackgroundTransparency = 1
+
+    local volBg = Instance.new("Frame")
+    volBg.Parent = volContainer
+    volBg.Size = UDim2.new(1, 0, 0, 6)
+    volBg.Position = UDim2.new(0, 0, 0, 18)
+    volBg.BackgroundColor3 = Color3.fromRGB(35, 35, 45)
+    Instance.new("UICorner", volBg).CornerRadius = UDim.new(0, 3)
+
+    local volFill = Instance.new("Frame")
+    volFill.Parent = volBg
+    volFill.Size = UDim2.new(0.5, 0, 1, 0)
+    volFill.BackgroundColor3 = Color3.fromRGB(30, 215, 96)
+    Instance.new("UICorner", volFill).CornerRadius = UDim.new(0, 3)
+
+    local draggingVol = false
+    local function updateVolume(input)
+        local pos = math.clamp((input.Position.X - volBg.AbsolutePosition.X) / volBg.AbsoluteSize.X, 0, 1)
+        volFill.Size = UDim2.new(pos, 0, 1, 0)
+        local volVal = math.floor(pos * 100)
+        volLbl.Text = "Volume: " .. tostring(volVal) .. "%"
+        currentSound.Volume = pos
+    end
+
+    volBg.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingVol = true updateVolume(input)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if draggingVol and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            updateVolume(input)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            draggingVol = false
+        end
+    end)
+
+    local btnPlayThon = Instance.new("TextButton")
+    btnPlayThon.Parent = spotifyPanel
+    btnPlayThon.Size = UDim2.new(0.88, 0, 0, 35)
+    btnPlayThon.Position = UDim2.new(0.06, 0, 0, 122)
+    btnPlayThon.BackgroundColor3 = Color3.fromRGB(20, 45, 25)
+    btnPlayThon.Text = "▶ ThonRemix (81533059856274)"
+    btnPlayThon.Font = Enum.Font.GothamBold
+    btnPlayThon.TextColor3 = Color3.fromRGB(30, 215, 96)
+    btnPlayThon.TextSize = 10
+    Instance.new("UICorner", btnPlayThon).CornerRadius = UDim.new(0, 8)
+
+    btnPlayThon.MouseButton1Click:Connect(function()
+        songNameLbl.Text = "ThonRemix"
+        playMusicById("81533059856274", "ThonRemix")
+    end)
+
+    local btnPlayChina = Instance.new("TextButton")
+    btnPlayChina.Parent = spotifyPanel
+    btnPlayChina.Size = UDim2.new(0.88, 0, 0, 35)
+    btnPlayChina.Position = UDim2.new(0.06, 0, 0, 165)
+    btnPlayChina.BackgroundColor3 = Color3.fromRGB(20, 45, 25)
+    btnPlayChina.Text = "▶ 中国音乐 (87570666848900)"
+    btnPlayChina.Font = Enum.Font.GothamBold
+    btnPlayChina.TextColor3 = Color3.fromRGB(30, 215, 96)
+    btnPlayChina.TextSize = 10
+    Instance.new("UICorner", btnPlayChina).CornerRadius = UDim.new(0, 8)
+
+    btnPlayChina.MouseButton1Click:Connect(function()
+        songNameLbl.Text = "中国音乐"
+        playMusicById("87570666848900", "中国音乐")
+    end)
+
+    local btnStopMusic = Instance.new("TextButton")
+    btnStopMusic.Parent = spotifyPanel
+    btnStopMusic.Size = UDim2.new(0.88, 0, 0, 30)
+    btnStopMusic.Position = UDim2.new(0.06, 0, 0, 210)
+    btnStopMusic.BackgroundColor3 = Color3.fromRGB(50, 20, 20)
+    btnStopMusic.Text = "⏸ Dừng Phát Nhạc"
+    btnStopMusic.Font = Enum.Font.GothamBold
+    btnStopMusic.TextColor3 = Color3.fromRGB(255, 80, 80)
+    btnStopMusic.TextSize = 10
+    Instance.new("UICorner", btnStopMusic).CornerRadius = UDim.new(0, 8)
+
+    btnStopMusic.MouseButton1Click:Connect(function()
+        currentSound:Stop()
+        updateStatus("⏸ Đã dừng nhạc")
+    end)
+
+    -- PANEL TOGGLES
+    btnServer.MouseButton1Click:Connect(function() 
+        serverPanel.Visible = not serverPanel.Visible 
+        if serverPanel.Visible then
+            settingsPanel.Visible = false
+            lennonPanel.Visible = false
+            spotifyPanel.Visible = false
+        end
+    end)
+
+    btnSettings.MouseButton1Click:Connect(function() 
+        settingsPanel.Visible = not settingsPanel.Visible 
+        if settingsPanel.Visible then
+            serverPanel.Visible = false
+            lennonPanel.Visible = false
+            spotifyPanel.Visible = false
+        end
+    end)
+
     btnLennon.MouseButton1Click:Connect(function() 
         lennonPanel.Visible = not lennonPanel.Visible 
         if lennonPanel.Visible then
             serverPanel.Visible = false
             settingsPanel.Visible = false
+            spotifyPanel.Visible = false
+        end
+    end)
+
+    btnSpotifyTab.MouseButton1Click:Connect(function()
+        spotifyPanel.Visible = not spotifyPanel.Visible
+        if spotifyPanel.Visible then
+            serverPanel.Visible = false
+            settingsPanel.Visible = false
+            lennonPanel.Visible = false
         end
     end)
 
@@ -1061,6 +1265,7 @@ local function createHubUI()
         serverPanel.Visible = false
         settingsPanel.Visible = false
         lennonPanel.Visible = false
+        spotifyPanel.Visible = false
         minIcon.Visible = true 
     end)
     minIcon.MouseButton1Click:Connect(function() 
