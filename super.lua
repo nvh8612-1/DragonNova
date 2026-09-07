@@ -267,7 +267,6 @@ local function chunkFlyTo(targetCFrame, speed)
     end
 end
 
--- Đã thay thế logic Ziczac thành bay thẳng 3 giai đoạn thời gian
 local function ziczacTweenToBase(destinationCFrame)
     local char = LocalPlayer.Character
     if not char then return end
@@ -291,7 +290,6 @@ local function ziczacTweenToBase(destinationCFrame)
         local nextCF = CFrame.new(nextPos, nextPos + direction)
 
         if elapsedTime < 1 then
-            -- Giai đoạn 1 (0s - 1s): Tween mượt với task.wait(0.0)
             local stepTime = moveDist / math.max(speedVal, 1)
             currentTween = TweenService:Create(hrp, TweenInfo.new(stepTime, Enum.EasingStyle.Linear), {CFrame = nextCF})
             currentTween:Play()
@@ -300,7 +298,6 @@ local function ziczacTweenToBase(destinationCFrame)
             task.wait(0.0)
 
         elseif elapsedTime >= 1 and elapsedTime < 2 then
-            -- Giai đoạn 2 (1s - 2s): Tween từng đoạn với task.wait(0.05)
             local stepTime = moveDist / math.max(speedVal, 1)
             currentTween = TweenService:Create(hrp, TweenInfo.new(stepTime, Enum.EasingStyle.Linear), {CFrame = nextCF})
             currentTween:Play()
@@ -309,7 +306,6 @@ local function ziczacTweenToBase(destinationCFrame)
             task.wait(0.05)
 
         else
-            -- Giai đoạn 3 (Sau 2s): Teleport từng đoạn với task.wait(0.05)
             hrp.CFrame = nextCF
             hrp.AssemblyLinearVelocity = Vector3.zero
             task.wait(0.05)
@@ -714,7 +710,7 @@ local function createHubUI()
     btnLennon.Size = UDim2.new(0, 48, 0, 18)
     btnLennon.Position = UDim2.new(0.45, 0, 0, 32)
     btnLennon.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
-    btnLennon.Text = "★ Lennon"
+    btnLennon.Text = "★V'ÎP★"
     btnLennon.Font = Enum.Font.GothamBold
     btnLennon.TextColor3 = Color3.fromRGB(255, 215, 0)
     btnLennon.TextSize = 8
@@ -852,7 +848,6 @@ local function createHubUI()
         end)
     end)
 
-    -- NÚT SERVER HOP MENU NHOIIIX
     local btnNhoiiiX = Instance.new("TextButton")
     btnNhoiiiX.Parent = serverPanel
     btnNhoiiiX.Size = UDim2.new(0.88, 0, 0, 38)
@@ -897,7 +892,7 @@ local function createHubUI()
     setsTitle.TextColor3 = Color3.fromRGB(255, 165, 0)
     setsTitle.BackgroundTransparency = 1
 
-    -- LENNON PANEL
+    -- ★V'ÎP★ PANEL
     local lennonPanel = Instance.new("Frame")
     lennonPanel.Parent = screenGui
     lennonPanel.Size = UDim2.new(0, 250, 0, 310)
@@ -915,7 +910,7 @@ local function createHubUI()
     lennonTitle.Parent = lennonPanel
     lennonTitle.Size = UDim2.new(1, 0, 0, 35)
     lennonTitle.Position = UDim2.new(0, 0, 0, 5)
-    lennonTitle.Text = "★ LENNON MENU"
+    lennonTitle.Text = "★V'ÎP★ MENU"
     lennonTitle.Font = Enum.Font.GothamBold
     lennonTitle.TextSize = 13
     lennonTitle.TextColor3 = Color3.fromRGB(255, 215, 0)
@@ -926,7 +921,7 @@ local function createHubUI()
     btnLennonHubVip.Size = UDim2.new(0.88, 0, 0, 40)
     btnLennonHubVip.Position = UDim2.new(0.06, 0, 0, 50)
     btnLennonHubVip.BackgroundColor3 = Color3.fromRGB(35, 30, 15)
-    btnLennonHubVip.Text = "★ Lennon Hub Vip v2"
+    btnLennonHubVip.Text = "★V'ÎP★ Hub v2"
     btnLennonHubVip.Font = Enum.Font.GothamBold
     btnLennonHubVip.TextColor3 = Color3.fromRGB(255, 215, 0)
     btnLennonHubVip.TextSize = 13
@@ -939,6 +934,28 @@ local function createHubUI()
     btnLennonHubVip.MouseButton1Click:Connect(function()
         pcall(function()
             loadstring(game:HttpGet("https://raw.githubusercontent.com/lennonxscripts/lennonhubv2/refs/heads/main/stealaneggv2"))()
+        end)
+    end)
+
+    -- NÚT MIÎRANDA HUB
+    local btnMiirandaHub = Instance.new("TextButton")
+    btnMiirandaHub.Parent = lennonPanel
+    btnMiirandaHub.Size = UDim2.new(0.88, 0, 0, 40)
+    btnMiirandaHub.Position = UDim2.new(0.06, 0, 0, 100)
+    btnMiirandaHub.BackgroundColor3 = Color3.fromRGB(35, 30, 15)
+    btnMiirandaHub.Text = "★ Miîranda Hub ★"
+    btnMiirandaHub.Font = Enum.Font.GothamBold
+    btnMiirandaHub.TextColor3 = Color3.fromRGB(255, 215, 0)
+    btnMiirandaHub.TextSize = 13
+    Instance.new("UICorner", btnMiirandaHub).CornerRadius = UDim.new(0, 8)
+
+    local miirandaBtnStroke = Instance.new("UIStroke", btnMiirandaHub)
+    miirandaBtnStroke.Color = Color3.fromRGB(255, 215, 0)
+    miirandaBtnStroke.Thickness = 1.2
+
+    btnMiirandaHub.MouseButton1Click:Connect(function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/miirandahub/loader/refs/heads/main/stealaeggs"))()
         end)
     end)
 
