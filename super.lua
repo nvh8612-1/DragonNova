@@ -1,4 +1,4 @@
--- Delta Executor: Dragon Nova Hub v25.5 (Full Features + Spotify Tab Integration)
+-- Delta Executor: Dragon Nova Hub v27.0 (Modified 3-Stage Flight System)
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -19,10 +19,8 @@ local hitboxActive = true
 local antiTrapActive = true
 local monsterScanActive = false
 
--- Server Hop Configs
-local targetPlayerCount = 0
-
 -- Configs
+local targetPlayerCount = 0
 local speedVal = 300
 local chunkVal = 10
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
@@ -230,9 +228,10 @@ RunService.Stepped:Connect(function()
 end)
 
 -- =================================================================
--- 3. CHUNK TWEEN MOVEMENT
+-- 3. CORE FLY ENGINE (3 GIAI ĐOẠN BAY THẲNG VỀ BASE)
 -- =================================================================
-local function chunkTweenTo(targetCFrame)
+
+local function chunkFlyTo(targetCFrame, speed)
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -242,30 +241,83 @@ local function chunkTweenTo(targetCFrame)
     local targetPos = targetCFrame.Position
     local totalDistance = (targetPos - startPos).Magnitude
 
-    if totalDistance <= 1.5 then
+    if totalDistance <= 2 then
         hrp.CFrame = targetCFrame
-        hrp.AssemblyLinearVelocity = Vector3.zero
         return
     end
 
-    local steps = math.max(1, math.floor(totalDistance / chunkVal))
+    local chunkSize = math.max(chunkVal, 5)
+    local numChunks = math.ceil(totalDistance / chunkSize)
     local direction = (targetPos - startPos).Unit
 
-    for i = 1, steps do
-        if not monsterScanActive and not teleguiadoActive then break end
+    for i = 1, numChunks do
+        if not teleguiadoActive and not monsterScanActive then break end
 
-        local nextPos = startPos + (direction * (i * chunkVal))
-        if i == steps then nextPos = targetPos end
+        local nextPos = (i == numChunks) and targetPos or (startPos + (direction * (i * chunkSize)))
+        local stepDist = (nextPos - hrp.Position).Magnitude
+        local stepTime = stepDist / math.max(speed, 1)
 
-        local stepDistance = (nextPos - hrp.Position).Magnitude
-        local duration = stepDistance / math.max(speedVal, 1)
-
-        local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear)
-        currentTween = TweenService:Create(hrp, tweenInfo, {CFrame = CFrame.new(nextPos, nextPos + direction)})
-        
+        currentTween = TweenService:Create(hrp, TweenInfo.new(stepTime, Enum.EasingStyle.Linear), {CFrame = CFrame.new(nextPos, nextPos + direction)})
         currentTween:Play()
         currentTween.Completed:Wait()
+
         hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+        task.wait(0.03)
+    end
+end
+
+-- Đã thay thế logic Ziczac thành bay thẳng 3 giai đoạn thời gian
+local function ziczacTweenToBase(destinationCFrame)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local startTime = tick()
+    local stepDistance = math.max(chunkVal or 15, 10)
+
+    while (hrp.Position - destinationCFrame.Position).Magnitude > 5 do
+        if not teleguiadoActive and not monsterScanActive then break end
+
+        local elapsedTime = tick() - startTime
+        local currentPos = hrp.Position
+        local targetPos = destinationCFrame.Position
+        local direction = (targetPos - currentPos).Unit
+        local distanceLeft = (targetPos - currentPos).Magnitude
+
+        local moveDist = math.min(stepDistance, distanceLeft)
+        local nextPos = currentPos + (direction * moveDist)
+        local nextCF = CFrame.new(nextPos, nextPos + direction)
+
+        if elapsedTime < 1 then
+            -- Giai đoạn 1 (0s - 1s): Tween mượt với task.wait(0.0)
+            local stepTime = moveDist / math.max(speedVal, 1)
+            currentTween = TweenService:Create(hrp, TweenInfo.new(stepTime, Enum.EasingStyle.Linear), {CFrame = nextCF})
+            currentTween:Play()
+            currentTween.Completed:Wait()
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            task.wait(0.0)
+
+        elseif elapsedTime >= 1 and elapsedTime < 2 then
+            -- Giai đoạn 2 (1s - 2s): Tween từng đoạn với task.wait(0.05)
+            local stepTime = moveDist / math.max(speedVal, 1)
+            currentTween = TweenService:Create(hrp, TweenInfo.new(stepTime, Enum.EasingStyle.Linear), {CFrame = nextCF})
+            currentTween:Play()
+            currentTween.Completed:Wait()
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            task.wait(0.05)
+
+        else
+            -- Giai đoạn 3 (Sau 2s): Teleport từng đoạn với task.wait(0.05)
+            hrp.CFrame = nextCF
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            task.wait(0.05)
+        end
+    end
+
+    if teleguiadoActive or monsterScanActive then
+        hrp.CFrame = destinationCFrame
     end
 end
 
@@ -361,7 +413,7 @@ task.spawn(function()
             local dist = hrp and math.floor((monsterPos - hrp.Position).Magnitude) or 0
 
             updateStatus("Đang bay tới quái [" .. tostring(dist) .. "m]")
-            chunkTweenTo(CFrame.new(monsterPos))
+            chunkFlyTo(CFrame.new(monsterPos), speedVal)
 
             if monsterScanActive then
                 updateStatus("Đang tương tác...")
@@ -392,10 +444,12 @@ task.spawn(function()
                     end
                 end)
 
-                updateStatus("Bay về Base...")
+                updateStatus("Bay thẳng về Base...")
                 teleguiadoActive = true
                 updateTeleguiadoUI()
-                chunkTweenTo(baseCFrame)
+                
+                ziczacTweenToBase(baseCFrame)
+                
                 teleguiadoActive = false
                 updateTeleguiadoUI()
 
@@ -492,7 +546,7 @@ local function getSafeUIParent()
     return target
 end
 
--- SERVER HOP FUNCTION WITH FLEXIBLE SEARCH LOGIC
+-- SERVER HOP FUNCTION
 local function joinServerWithPlayers(reqPlayers)
     updateStatus("Đang quét Server (<= " .. tostring(reqPlayers) .. " player)...")
     local placeId = game.PlaceId
@@ -666,7 +720,6 @@ local function createHubUI()
     btnLennon.TextSize = 8
     Instance.new("UICorner", btnLennon).CornerRadius = UDim.new(0, 6)
 
-    -- SPOTIFY TAB
     local btnSpotifyTab = Instance.new("TextButton")
     btnSpotifyTab.Parent = mainFrame
     btnSpotifyTab.Size = UDim2.new(0, 58, 0, 18)
@@ -781,13 +834,13 @@ local function createHubUI()
 
     local btnJoinServer = Instance.new("TextButton")
     btnJoinServer.Parent = serverPanel
-    btnJoinServer.Size = UDim2.new(0.88, 0, 0, 40)
+    btnJoinServer.Size = UDim2.new(0.88, 0, 0, 38)
     btnJoinServer.Position = UDim2.new(0.06, 0, 0, 115)
     btnJoinServer.BackgroundColor3 = Color3.fromRGB(0, 60, 45)
     btnJoinServer.Text = "Tham Gia Server"
     btnJoinServer.Font = Enum.Font.GothamBold
     btnJoinServer.TextColor3 = Color3.fromRGB(0, 255, 150)
-    btnJoinServer.TextSize = 13
+    btnJoinServer.TextSize = 12
     Instance.new("UICorner", btnJoinServer).CornerRadius = UDim.new(0, 8)
     local joinStroke = Instance.new("UIStroke", btnJoinServer)
     joinStroke.Color = Color3.fromRGB(0, 255, 150)
@@ -796,6 +849,27 @@ local function createHubUI()
     btnJoinServer.MouseButton1Click:Connect(function()
         task.spawn(function()
             joinServerWithPlayers(targetPlayerCount)
+        end)
+    end)
+
+    -- NÚT SERVER HOP MENU NHOIIIX
+    local btnNhoiiiX = Instance.new("TextButton")
+    btnNhoiiiX.Parent = serverPanel
+    btnNhoiiiX.Size = UDim2.new(0.88, 0, 0, 38)
+    btnNhoiiiX.Position = UDim2.new(0.06, 0, 0, 160)
+    btnNhoiiiX.BackgroundColor3 = Color3.fromRGB(35, 20, 50)
+    btnNhoiiiX.Text = "Server Hop Menu NHOIIIX"
+    btnNhoiiiX.Font = Enum.Font.GothamBold
+    btnNhoiiiX.TextColor3 = Color3.fromRGB(180, 100, 255)
+    btnNhoiiiX.TextSize = 11
+    Instance.new("UICorner", btnNhoiiiX).CornerRadius = UDim.new(0, 8)
+    local nhoiiiStroke = Instance.new("UIStroke", btnNhoiiiX)
+    nhoiiiStroke.Color = Color3.fromRGB(180, 100, 255)
+    nhoiiiStroke.Thickness = 1.2
+
+    btnNhoiiiX.MouseButton1Click:Connect(function()
+        pcall(function()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Nhoiii/NhoiiiX-Hub-Dev/refs/heads/main/NhoiiiHopSv.lua"))()
         end)
     end)
 
@@ -852,7 +926,7 @@ local function createHubUI()
     btnLennonHubVip.Size = UDim2.new(0.88, 0, 0, 40)
     btnLennonHubVip.Position = UDim2.new(0.06, 0, 0, 50)
     btnLennonHubVip.BackgroundColor3 = Color3.fromRGB(35, 30, 15)
-    btnLennonHubVip.Text = "★ Lennon Hub Vip"
+    btnLennonHubVip.Text = "★ Lennon Hub Vip v2"
     btnLennonHubVip.Font = Enum.Font.GothamBold
     btnLennonHubVip.TextColor3 = Color3.fromRGB(255, 215, 0)
     btnLennonHubVip.TextSize = 13
@@ -864,7 +938,7 @@ local function createHubUI()
 
     btnLennonHubVip.MouseButton1Click:Connect(function()
         pcall(function()
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/lennonxscripts/lennonhub/main/stealaegg.lua"))()
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/lennonxscripts/lennonhubv2/refs/heads/main/stealaneggv2"))()
         end)
     end)
 
@@ -1172,7 +1246,7 @@ local function createHubUI()
         end)
     end
 
-    createSlider(125, "⚡ Tween Speed", 10, 600, speedVal, function(val) speedVal = val end)
+    createSlider(125, "⚡ Speed", 10, 600, speedVal, function(val) speedVal = val end)
     createSlider(175, "🌀 Chunk", 2, 100, chunkVal, function(val) chunkVal = val end)
 
     -- MAIN MENU BUTTONS
@@ -1202,7 +1276,13 @@ local function createHubUI()
 
     local btnTele = createMainGridButton(0.06, 105, 0.42, "Teleguiado", teleguiadoActive, function()
         teleguiadoActive = not teleguiadoActive
-        if teleguiadoActive then task.spawn(function() chunkTweenTo(baseCFrame) end) end
+        if teleguiadoActive then 
+            task.spawn(function() 
+                ziczacTweenToBase(baseCFrame) 
+                teleguiadoActive = false
+                updateTeleguiadoUI()
+            end) 
+        end
         return teleguiadoActive
     end)
 
