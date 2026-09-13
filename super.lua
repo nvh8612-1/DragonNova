@@ -1,4 +1,4 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub Edition)
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub Edition - Single Toggle Mini Container)
 local iOS26Glass = {}
 
 local CoreGui = game:GetService("CoreGui")
@@ -7,8 +7,6 @@ local UserInputService = game:GetService("UserInputService")
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
-local TeleportService = game:GetService("TeleportService")
-local HttpService = game:GetService("HttpService")
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -304,100 +302,90 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- MINI LIQUID GLASS BUTTON MANAGEMENT
+-- MINI LIQUID GLASS CONTAINER (1 NÚT TOGGLE DUY NHẤT)
 -- =================================================================
 local MiniGlassGui = nil
-local MiniGlassButton = nil
-
-local function executeTeleguiadoStep()
-    task.spawn(function()
-        pcall(function()
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-
-            teleguiadoActive = true
-            local targetCF = baseCFrame
-            local startPos = hrp.Position
-            local endPos = targetCF.Position
-            local dist = (endPos - startPos).Magnitude
-
-            local stepSize = math.clamp(speedVal / math.max(chunkVal, 1), 1, 300)
-
-            while dist > stepSize and teleguiadoActive do
-                local direction = (endPos - hrp.Position).Unit
-                hrp.CFrame = hrp.CFrame + (direction * stepSize)
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.AssemblyAngularVelocity = Vector3.zero
-                dist = (endPos - hrp.Position).Magnitude
-                task.wait(0.05)
-            end
-
-            if teleguiadoActive then
-                hrp.CFrame = targetCF
-                hrp.AssemblyLinearVelocity = Vector3.zero
-                hrp.AssemblyAngularVelocity = Vector3.zero
-            end
-            teleguiadoActive = false
-        end)
-    end)
-end
+local MiniGlassContainer = nil
 
 local function createMiniGlassButton()
     if MiniGlassGui then pcall(function() MiniGlassGui:Destroy() end) end
 
     MiniGlassGui = Instance.new("ScreenGui")
-    MiniGlassGui.Name = "iOS26_MiniGlassButton"
+    MiniGlassGui.Name = "iOS26_MiniGlassContainerGui"
     if gethui then
         MiniGlassGui.Parent = gethui()
     else
         MiniGlassGui.Parent = CoreGui
     end
 
-    MiniGlassButton = Instance.new("TextButton")
-    MiniGlassButton.Name = "TeleguiadoMiniBtn"
-    MiniGlassButton.Size = UDim2.new(0, 56, 0, 56)
-    MiniGlassButton.Position = UDim2.new(0.85, 0, 0.2, 0)
-    MiniGlassButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    MiniGlassButton.BackgroundTransparency = 0.78
-    MiniGlassButton.Text = "BASE"
-    MiniGlassButton.TextColor3 = Color3.fromRGB(15, 15, 20)
-    MiniGlassButton.Font = Enum.Font.GothamBold
-    MiniGlassButton.TextSize = 11
-    MiniGlassButton.AutoButtonColor = false
-    MiniGlassButton.Parent = MiniGlassGui
+    -- Khung Container bao quanh (Gọn gàng cho 1 nút toggle)
+    MiniGlassContainer = Instance.new("Frame")
+    MiniGlassContainer.Name = "MiniContainer"
+    MiniGlassContainer.Size = UDim2.new(0, 72, 0, 66)
+    MiniGlassContainer.Position = UDim2.new(0.85, 0, 0.2, 0)
+    MiniGlassContainer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+    MiniGlassContainer.BackgroundTransparency = 0.78
+    MiniGlassContainer.Parent = MiniGlassGui
 
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(1, 0)
-    Corner.Parent = MiniGlassButton
+    local ContCorner = Instance.new("UICorner")
+    ContCorner.CornerRadius = UDim.new(0, 16)
+    ContCorner.Parent = MiniGlassContainer
 
-    local Stroke = Instance.new("UIStroke")
-    Stroke.Thickness = 1.2
-    Stroke.Color = Color3.fromRGB(255, 255, 255)
-    Stroke.Transparency = 0.3
-    Stroke.Parent = MiniGlassButton
+    local ContStroke = Instance.new("UIStroke")
+    ContStroke.Thickness = 1.2
+    ContStroke.Color = Color3.fromRGB(255, 255, 255)
+    ContStroke.Transparency = 0.3
+    ContStroke.Parent = MiniGlassContainer
 
-    local Gradient = Instance.new("UIGradient")
-    Gradient.Rotation = 45
-    Gradient.Color = ColorSequence.new({
+    local ContGradient = Instance.new("UIGradient")
+    ContGradient.Rotation = 45
+    ContGradient.Color = ColorSequence.new({
         ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(240, 245, 255)),
         ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
     })
-    Gradient.Transparency = NumberSequence.new({
+    ContGradient.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0.4),
         NumberSequenceKeypoint.new(0.5, 0.75),
         NumberSequenceKeypoint.new(1, 0.8)
     })
-    Gradient.Parent = MiniGlassButton
+    ContGradient.Parent = MiniGlassContainer
 
-    -- Dragging support for mini button
+    -- Chỉ giữ lại 1 Nút Toggle duy nhất
+    local MiniToggleButton = Instance.new("TextButton")
+    MiniToggleButton.Name = "ToggleBtn"
+    MiniToggleButton.Size = UDim2.new(0, 60, 0, 52)
+    MiniToggleButton.Position = UDim2.new(0, 6, 0.5, -26)
+    MiniToggleButton.BackgroundColor3 = autoSteal and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
+    MiniToggleButton.BackgroundTransparency = autoSteal and 0.25 or 0.65
+    MiniToggleButton.Text = autoSteal and "ON" or "OFF"
+    MiniToggleButton.TextColor3 = autoSteal and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
+    MiniToggleButton.Font = Enum.Font.GothamBold
+    MiniToggleButton.TextSize = 11
+    MiniToggleButton.AutoButtonColor = false
+    MiniToggleButton.Parent = MiniGlassContainer
+
+    local ToggleCorner = Instance.new("UICorner")
+    ToggleCorner.CornerRadius = UDim.new(0, 12)
+    ToggleCorner.Parent = MiniToggleButton
+
+    MiniToggleButton.MouseButton1Click:Connect(function()
+        autoSteal = not autoSteal
+        TweenService:Create(MiniToggleButton, TweenInfo.new(0.15), {
+            BackgroundColor3 = autoSteal and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = autoSteal and 0.25 or 0.65
+        }):Play()
+        MiniToggleButton.Text = autoSteal and "ON" or "OFF"
+        MiniToggleButton.TextColor3 = autoSteal and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
+    end)
+
+    -- Kéo thả toàn bộ Container
     local dragging, dragInput, dragStart, startPos
-    MiniGlassButton.InputBegan:Connect(function(input)
+    MiniGlassContainer.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
             dragging = true
             dragStart = input.Position
-            startPos = MiniGlassButton.Position
+            startPos = MiniGlassContainer.Position
             input.Changed:Connect(function()
                 if input.UserInputState == Enum.UserInputState.End then
                     dragging = false
@@ -405,7 +393,7 @@ local function createMiniGlassButton()
             end)
         end
     end)
-    MiniGlassButton.InputChanged:Connect(function(input)
+    MiniGlassContainer.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
         end
@@ -413,15 +401,8 @@ local function createMiniGlassButton()
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
-            MiniGlassButton.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            MiniGlassContainer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
         end
-    end)
-
-    MiniGlassButton.MouseButton1Click:Connect(function()
-        TweenService:Create(MiniGlassButton, TweenInfo.new(0.08), {BackgroundTransparency = 0.4}):Play()
-        task.wait(0.08)
-        TweenService:Create(MiniGlassButton, TweenInfo.new(0.12), {BackgroundTransparency = 0.78}):Play()
-        executeTeleguiadoStep()
     end)
 end
 
@@ -429,7 +410,7 @@ local function removeMiniGlassButton()
     if MiniGlassGui then
         pcall(function() MiniGlassGui:Destroy() end)
         MiniGlassGui = nil
-        MiniGlassButton = nil
+        MiniGlassContainer = nil
     end
 end
 
