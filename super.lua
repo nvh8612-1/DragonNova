@@ -1,4 +1,4 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub Edition - Single Toggle Mini Container)
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub Edition - Full Script)
 local iOS26Glass = {}
 
 local CoreGui = game:GetService("CoreGui")
@@ -21,6 +21,7 @@ local autoEggActive = false
 local hitboxActive = true
 local antiTrapActive = true
 local godModeActive = false
+local flyToBaseActive = false
 
 local speedVal = 600
 local chunkVal = 12
@@ -302,10 +303,27 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- MINI LIQUID GLASS CONTAINER (1 NÚT TOGGLE DUY NHẤT)
+-- MINI LIQUID GLASS CONTAINER (GÓC TRÁI MÀN HÌNH - BAY VỀ BASE)
 -- =================================================================
 local MiniGlassGui = nil
 local MiniGlassContainer = nil
+
+local function teleportLoop()
+    task.spawn(function()
+        while flyToBaseActive do
+            pcall(function()
+                local char = LocalPlayer.Character
+                if char then
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        hrp.CFrame = baseCFrame
+                    end
+                end
+            end)
+            task.wait(0.05)
+        end
+    end)
+end
 
 local function createMiniGlassButton()
     if MiniGlassGui then pcall(function() MiniGlassGui:Destroy() end) end
@@ -318,11 +336,11 @@ local function createMiniGlassButton()
         MiniGlassGui.Parent = CoreGui
     end
 
-    -- Khung Container bao quanh (Gọn gàng cho 1 nút toggle)
+    -- Khung Container đặt ở góc TRÁI màn hình (0.02, 0, 0.2, 0)
     MiniGlassContainer = Instance.new("Frame")
     MiniGlassContainer.Name = "MiniContainer"
-    MiniGlassContainer.Size = UDim2.new(0, 72, 0, 66)
-    MiniGlassContainer.Position = UDim2.new(0.85, 0, 0.2, 0)
+    MiniGlassContainer.Size = UDim2.new(0, 80, 0, 66)
+    MiniGlassContainer.Position = UDim2.new(0.02, 0, 0.2, 0)
     MiniGlassContainer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     MiniGlassContainer.BackgroundTransparency = 0.78
     MiniGlassContainer.Parent = MiniGlassGui
@@ -351,17 +369,17 @@ local function createMiniGlassButton()
     })
     ContGradient.Parent = MiniGlassContainer
 
-    -- Chỉ giữ lại 1 Nút Toggle duy nhất
+    -- Nút Toggle bật/tắt bay về Base
     local MiniToggleButton = Instance.new("TextButton")
     MiniToggleButton.Name = "ToggleBtn"
-    MiniToggleButton.Size = UDim2.new(0, 60, 0, 52)
+    MiniToggleButton.Size = UDim2.new(0, 68, 0, 52)
     MiniToggleButton.Position = UDim2.new(0, 6, 0.5, -26)
-    MiniToggleButton.BackgroundColor3 = autoSteal and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
-    MiniToggleButton.BackgroundTransparency = autoSteal and 0.25 or 0.65
-    MiniToggleButton.Text = autoSteal and "ON" or "OFF"
-    MiniToggleButton.TextColor3 = autoSteal and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
+    MiniToggleButton.BackgroundColor3 = flyToBaseActive and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
+    MiniToggleButton.BackgroundTransparency = flyToBaseActive and 0.25 or 0.65
+    MiniToggleButton.Text = flyToBaseActive and "BASE: ON" or "BASE: OFF"
+    MiniToggleButton.TextColor3 = flyToBaseActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
     MiniToggleButton.Font = Enum.Font.GothamBold
-    MiniToggleButton.TextSize = 11
+    MiniToggleButton.TextSize = 10
     MiniToggleButton.AutoButtonColor = false
     MiniToggleButton.Parent = MiniGlassContainer
 
@@ -370,16 +388,20 @@ local function createMiniGlassButton()
     ToggleCorner.Parent = MiniToggleButton
 
     MiniToggleButton.MouseButton1Click:Connect(function()
-        autoSteal = not autoSteal
+        flyToBaseActive = not flyToBaseActive
         TweenService:Create(MiniToggleButton, TweenInfo.new(0.15), {
-            BackgroundColor3 = autoSteal and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = autoSteal and 0.25 or 0.65
+            BackgroundColor3 = flyToBaseActive and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255),
+            BackgroundTransparency = flyToBaseActive and 0.25 or 0.65
         }):Play()
-        MiniToggleButton.Text = autoSteal and "ON" or "OFF"
-        MiniToggleButton.TextColor3 = autoSteal and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
+        MiniToggleButton.Text = flyToBaseActive and "BASE: ON" or "BASE: OFF"
+        MiniToggleButton.TextColor3 = flyToBaseActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
+        
+        if flyToBaseActive then
+            teleportLoop()
+        end
     end)
 
-    -- Kéo thả toàn bộ Container
+    -- Kéo thả Container
     local dragging, dragInput, dragStart, startPos
     MiniGlassContainer.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -407,6 +429,7 @@ local function createMiniGlassButton()
 end
 
 local function removeMiniGlassButton()
+    flyToBaseActive = false
     if MiniGlassGui then
         pcall(function() MiniGlassGui:Destroy() end)
         MiniGlassGui = nil
