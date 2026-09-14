@@ -1,4 +1,4 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub - Full Script Auto Zone & Mini Arena Toggles)
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub - Layout 2x4 Mini Arena)
 local iOS26Glass = {}
 
 local CoreGui = game:GetService("CoreGui")
@@ -30,7 +30,6 @@ local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
 local autoZoneState = 0 -- 0: Chuẩn bị | 1: Đã bị stun/knockback sau khi nhặt | 2: Đang cooldown
 local lastPromptTime = 0
 
--- Lắng nghe trạng thái nhân vật bị Stun / Knockback / Ragdoll
 local function monitorCharacterStun(char)
     if not char then return end
     local hum = char:WaitForChild("Humanoid", 5)
@@ -268,7 +267,7 @@ end
 
 local function scanTraps()
     local debris = workspace:FindFirstChild("__DEBRIS")
-    if not debris then return end
+    if not debris me then return end
     for _, child in ipairs(debris:GetChildren()) do
         for _, desc in ipairs(child:GetDescendants()) do if desc:IsA("BasePart") then disableTrapPart(desc) end end
         if child:IsA("BasePart") then disableTrapPart(child) end
@@ -302,7 +301,7 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- HỆ THỐNG NÚT MINI HÌNH TRÒN (VIỀN TRẮNG OFF / XANH LÁ ON)
+-- HỆ THỐNG NÚT MINI ARENA (CẤU TRÚC 2 HÀNG X 4 CỘT CHUẨN BẢN VẼ)
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -312,15 +311,28 @@ else
     MiniGui.Parent = CoreGui
 end
 
+-- Khung chứa cố định ở góc trên bên phải màn hình
+local ArenaContainer = Instance.new("Frame")
+ArenaContainer.Name = "ArenaContainer"
+ArenaContainer.Size = UDim2.new(0, 180, 0, 85)
+ArenaContainer.AnchorPoint = Vector2.new(1, 0)
+ArenaContainer.Position = UDim2.new(1, -20, 0, 10)
+ArenaContainer.BackgroundTransparency = 1
+ArenaContainer.Parent = MiniGui
+
+-- Sắp xếp nút theo đúng 2 hàng chuẩn ảnh khoanh tròn
 local miniButtonsData = {
-    { id = "Base",     icon = "🏠",   screenX = 470, screenY = 11,  xyz = baseCFrame or CFrame.new(519.01, 70.27, -362.74) },
-    { id = "Volcano",  icon = "🌋",   screenX = 534, screenY = -52, xyz = CFrame.new(1878, 70, -395) },
-    { id = "Ocean",    icon = "🌊",   screenX = 601, screenY = -53, xyz = CFrame.new(2281, 70, -329) },
-    { id = "Dino",     icon = "🦖",   screenX = 671, screenY = -52, xyz = CFrame.new(2815, 70, -396) },
-    { id = "Galaxy",   icon = "🌌",   screenX = 538, screenY = 9,   xyz = CFrame.new(3393, 70, -327) },
-    { id = "Flower",   icon = "🌸",   screenX = 666, screenY = 11,  xyz = CFrame.new(4030, 70, -398) },
-    { id = "Lizard",   icon = "🦎",   screenX = 601, screenY = 10,  xyz = CFrame.new(4797, 70, -330) },
-    { id = "AngelDev", icon = "👼😈", screenX = 470, screenY = -53, xyz = CFrame.new(5662, 70, -344) }
+    -- HÀNG TRÊN (Row = 0)
+    { id = "Base",     icon = "🏠",   col = 0, row = 0, xyz = baseCFrame or CFrame.new(519.01, 70.27, -362.74) }, -- Ô Xám
+    { id = "Volcano",  icon = "🌋",   col = 1, row = 0, xyz = CFrame.new(1878, 70, -395) },                      -- Ô Đỏ 1
+    { id = "Ocean",    icon = "🌊",   col = 2, row = 0, xyz = CFrame.new(2281, 70, -329) },                      -- Ô Đỏ 2
+    { id = "Dino",     icon = "🦖",   col = 3, row = 0, xyz = CFrame.new(2815, 70, -396) },                      -- Ô Đỏ 3
+
+    -- HÀNG ĐƯỚI (Row = 1)
+    { id = "AngelDev", icon = "👼😈", col = 0, row = 1, xyz = CFrame.new(5662, 70, -344) },                      -- Ô Xanh lá
+    { id = "Galaxy",   icon = "🌌",   col = 1, row = 1, xyz = CFrame.new(3393, 70, -327) },                      -- Ô Vàng 1
+    { id = "Flower",   icon = "🌸",   col = 2, row = 1, xyz = CFrame.new(4030, 70, -398) },                      -- Ô Vàng 2
+    { id = "Lizard",   icon = "🦎",   col = 3, row = 1, xyz = CFrame.new(4797, 70, -330) }                       -- Ô Vàng 3
 }
 
 local activeTeleportToken = 0
@@ -356,7 +368,7 @@ local function startChunkTeleport(targetCF, sourceBtn)
                             hrp.CFrame = targetCF
                             activeTeleportToken = 0
                             
-                            -- ĐÃ TỚI ĐÍCH -> TỰ ĐỘNG CHUYỂN VIỀN VỀ TRẮNG (OFF)
+                            -- ĐẾN TỌA ĐỘ -> VIỀN CHUYỂN VỀ TRẮNG (OFF)
                             if sourceBtn and miniStrokes[sourceBtn] then
                                 buttonStates[sourceBtn] = false
                                 TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
@@ -374,12 +386,10 @@ local function startChunkTeleport(targetCF, sourceBtn)
     end)
 end
 
--- Hàm kích hoạt nút từ xa cho Auto Zone
 triggerMiniButtonByName = function(idName)
     local obj = miniButtonObjects[idName]
     if not obj then return end
 
-    -- Tắt hiệu ứng viền của các nút khác
     for otherBtn, otherStroke in pairs(miniStrokes) do
         buttonStates[otherBtn] = false
         TweenService:Create(otherStroke, TweenInfo.new(0.2), {
@@ -388,7 +398,7 @@ triggerMiniButtonByName = function(idName)
     end
 
     buttonStates[obj.btn] = true
-    -- Chuyển viền sang XANH LÁ (BẬT)
+    -- BẬT -> VIỀN XANH LÁ
     TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
         Color = Color3.fromRGB(48, 209, 88)
     }):Play()
@@ -396,20 +406,20 @@ triggerMiniButtonByName = function(idName)
     startChunkTeleport(obj.data.xyz, obj.btn)
 end
 
--- Tạo giao diện các nút tròn Mini (Ẩn mặc định, hiện khi Toggle trong Arena bật)
+-- Tạo các nút Liquid Glass dạng hình tròn 38x38
 for _, data in ipairs(miniButtonsData) do
     local btn = Instance.new("TextButton")
     btn.Name = "MiniBtn_" .. data.id
     btn.Size = UDim2.new(0, 38, 0, 38)
-    btn.AnchorPoint = Vector2.new(0.5, 0.5)
-    btn.Position = UDim2.new(0.5, data.screenX, 0.5, data.screenY)
+    -- Tự động tính vị trí X, Y theo Cột (0-3) và Hàng (0-1)
+    btn.Position = UDim2.new(0, data.col * 44, 0, data.row * 44)
     btn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     btn.BackgroundTransparency = 0.35
     btn.Text = data.icon
     btn.TextSize = 14
     btn.AutoButtonColor = false
-    btn.Visible = false -- Mặc định ẩn, bật Toggle trong Arena mới hiện
-    btn.Parent = MiniGui
+    btn.Visible = true -- Hiển thị trực tiếp trên màn hình
+    btn.Parent = ArenaContainer
 
     local corner = Instance.new("UICorner")
     corner.CornerRadius = UDim.new(1, 0)
@@ -428,6 +438,7 @@ for _, data in ipairs(miniButtonsData) do
     btn.MouseButton1Click:Connect(function()
         local isON = not buttonStates[btn]
 
+        -- Tắt trạng thái viền của tất cả các nút khác
         for otherBtn, otherStroke in pairs(miniStrokes) do
             buttonStates[otherBtn] = false
             TweenService:Create(otherStroke, TweenInfo.new(0.2), {
@@ -438,14 +449,14 @@ for _, data in ipairs(miniButtonsData) do
         buttonStates[btn] = isON
 
         if isON then
-            -- Viền XANH LÁ khi đang BẬT/BAY
+            -- BẬT -> Viền XANH LÁ
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(48, 209, 88)
             }):Play()
             
             startChunkTeleport(data.xyz, btn)
         else
-            -- Viền TRẮNG khi TẮT
+            -- TẮT -> Viền TRẮNG
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(255, 255, 255)
             }):Play()
@@ -1082,22 +1093,22 @@ MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     end
 end)
 
--- TAB ARENA (MỖI KHU VỰC LÀ MỘT TOGGLE - BẬT LÀ HIỆN NÚT TRÒN MÀN HÌNH)
+-- TAB ARENA (TOGGLE ẨN/HIỆN CẢ CỤM NÚT ARENA HOẶC NÚT LẺ)
+ArenaTab:AddToggle("Hiện cụm nút Arena", true, function(state)
+    ArenaContainer.Visible = state
+end)
+
 for _, data in ipairs(miniButtonsData) do
-    ArenaTab:AddToggle(data.icon .. " " .. data.id, false, function(state)
+    ArenaTab:AddToggle(data.icon .. " " .. data.id, true, function(state)
         local obj = miniButtonObjects[data.id]
         if obj and obj.btn then
-            obj.btn.Visible = state -- Hiện/Ẩn nút Mini tương ứng trên màn hình
-            
-            -- Nếu tắt toggle trong tab Arena thì cũng dừng bay và trả viền về Trắng
-            if not state then
-                if buttonStates[obj.btn] then
-                    buttonStates[obj.btn] = false
-                    stopTeleport()
-                    TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
-                        Color = Color3.fromRGB(255, 255, 255)
-                    }):Play()
-                end
+            obj.btn.Visible = state
+            if not state and buttonStates[obj.btn] then
+                buttonStates[obj.btn] = false
+                stopTeleport()
+                TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
+                    Color = Color3.fromRGB(255, 255, 255)
+                }):Play()
             end
         end
     end)
