@@ -26,7 +26,6 @@ local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
 
 -- =================================================================
 -- HỆ THỐNG NÚT MINI ARENA (CẤU TRÚC 2 HÀNG X 4 CỘT)
--- Khai báo trước để triggerMiniButtonByName không bị nil
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -108,7 +107,6 @@ local function startChunkTeleport(targetCF, sourceBtn)
     end)
 end
 
--- ĐỊNH NGHĨA HÀM KÍCH HOẠT NÚT THEO TÊN
 local function triggerMiniButtonByName(idName)
     local obj = miniButtonObjects[idName]
     if not obj then return end
@@ -147,7 +145,7 @@ for _, data in ipairs(miniButtonsData) do
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 2.5
-    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Color = Color3.fromRGB(255, 255, 255) -- Mặc định viền trắng
     stroke.Transparency = 0.1
     stroke.Parent = btn
 
@@ -169,22 +167,20 @@ for _, data in ipairs(miniButtonsData) do
 
         if isON then
             TweenService:Create(stroke, TweenInfo.new(0.2), {
-                Color = Color3.fromRGB(48, 209, 88)
+                Color = Color3.fromRGB(48, 209, 88) -- Viền xanh lá khi bật
             }):Play()
-            
             startChunkTeleport(data.xyz, btn)
         else
             TweenService:Create(stroke, TweenInfo.new(0.2), {
-                Color = Color3.fromRGB(255, 255, 255)
+                Color = Color3.fromRGB(255, 255, 255) -- Viền trắng khi tắt
             }):Play()
-            
             stopTeleport()
         end
     end)
 end
 
 -- =================================================================
--- LOGIC AUTO ZONE (3 BƯỚC)
+-- LOGIC AUTO ZONE
 -- =================================================================
 local autoZoneState = 0
 local lastPromptTime = 0
@@ -222,9 +218,7 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
         if autoZoneActive then
             if autoZoneState == 1 then
                 autoZoneState = 2
-
                 triggerMiniButtonByName("Base")
-
                 task.spawn(function()
                     task.wait(10)
                     autoZoneState = 0
@@ -234,34 +228,49 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
     end
 end)
 
--- GOD MODE LOGIC (GIỮ NGUYÊN CƠ CHẾ CỦA BẠN)
+-- =================================================================
+-- GOD MODE LOGIC CHUẨN CỦA BẠN (CLONE HUMANOID)
+-- =================================================================
 local function toggleGodMode(state)
     local character = LocalPlayer.Character
     if not character then return end
     
     if state then
+        -- Cất tất cả tool đang cầm vào balo trước khi clone để tránh lỗi script tool
         for _, tool in ipairs(character:GetChildren()) do
             if tool:IsA("Tool") then
                 tool.Parent = LocalPlayer.Backpack
             end
         end
         
+        local humanoid = character:FindFirstChildOfClass("Humanoid")
         local rootPart = character:FindFirstChild("HumanoidRootPart")
-        local currentCFrame = rootPart and rootPart.CFrame
+        if not humanoid or not rootPart then return end
+        
+        local currentCFrame = rootPart.CFrame
+        
+        local newHumanoid = humanoid:Clone()
+        newHumanoid.Parent = character
+        humanoid:Destroy()
         
         LocalPlayer.Character = nil
         LocalPlayer.Character = character
+        workspace.CurrentCamera.CameraSubject = newHumanoid
         
-        task.wait(0.2)
-        if rootPart and currentCFrame then
-            rootPart.CFrame = currentCFrame
-        end
+        task.defer(function()
+            if rootPart then
+                rootPart.CFrame = currentCFrame
+            end
+        end)
     else
+        -- TẮT: Trở lại trạng thái bình thường của game
         LocalPlayer:LoadCharacter()
     end
 end
 
+-- =================================================================
 -- PROXIMITY PROMPT & BYPASS
+-- =================================================================
 local shownPrompts = {}
 
 local function bypassPrompt(prompt, maxDist)
@@ -376,7 +385,7 @@ RunService.Stepped:Connect(function()
     end)
 end)
 
--- HITBOX (GIỮ NGUYÊN CODE CỦA BẠN) & ANTI TRAP
+-- HITBOX & ANTI TRAP
 local trapESP = {}
 local function createTrapESP(part)
     if not antiTrapActive or not part or not part:IsA("BasePart") or trapESP[part] then return end
@@ -833,7 +842,7 @@ function iOS26Glass:CreateWindow(titleText)
             Corner.Parent = BtnFrame
 
             local Stroke = Instance.new("UIStroke")
-            Stroke.Thickness = 1
+            Stroke.Thickness = 1.5
             Stroke.Color = Color3.fromRGB(255, 255, 255)
             Stroke.Transparency = 0.3
             Stroke.Parent = BtnFrame
@@ -859,10 +868,12 @@ function iOS26Glass:CreateWindow(titleText)
             TCorner.CornerRadius = UDim.new(0, 10)
             TCorner.Parent = ToggleFrame
 
+            -- VIỀN NÚT LIQUID GLASS (TRẮNG KHI TẮT, XANH LÁ KHI BẬT)
             local TStroke = Instance.new("UIStroke")
-            TStroke.Thickness = 1
-            TStroke.Color = Color3.fromRGB(255, 255, 255)
-            TStroke.Transparency = 0.3
+            TStroke.Thickness = 1.5
+            TStroke.Color = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
+            TStroke.Transparency = 0.2
+            TStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             TStroke.Parent = ToggleFrame
 
             local Label = Instance.new("TextLabel")
@@ -912,6 +923,10 @@ function iOS26Glass:CreateWindow(titleText)
                 local targetPos = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
                 local targetBg = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
                 local targetTrans = toggled and 0.25 or 0.6
+                local targetStrokeColor = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
+
+                -- Đổi màu viền khung
+                TweenService:Create(TStroke, TweenInfo.new(0.25), {Color = targetStrokeColor}):Play()
 
                 TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                     Size = UDim2.new(0, 24, 0, 14),
@@ -1097,7 +1112,7 @@ for _, data in ipairs(miniButtonsData) do
     end)
 end
 
--- TAB BYPASS
+-- TAB BYPASS (ĐÃ CẬP NHẬT GOD MODE THEO ĐÚNG ĐOẠN SCRIPT BẠN CẦN)
 BypassTab:AddToggle("God Mode", false, function(val)
     godModeActive = val
     toggleGodMode(val)
@@ -1130,7 +1145,7 @@ BypassTab:AddToggle("Anti Stun", antiStun, function(val)
     antiStun = val
 end)
 
--- TAB SETTINGS (CHỨA SPEED VÀ CHUNK)
+-- TAB SETTINGS
 SettingsTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
     speedVal = val
 end)
@@ -1139,7 +1154,7 @@ SettingsTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
     chunkVal = val
 end)
 
--- TAB MISC (CHỨA FIX LAG VÀ SERVER HOP)
+-- TAB MISC
 MiscTab:AddButton("Fix Lag / Boost FPS", function()
     pcall(function()
         local Workspace = game:GetService("Workspace")
@@ -1214,8 +1229,6 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
         pcall(function()
             settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
         end)
-
-        print("[FTGS] Fix Lag / Boost FPS: ON")
     end)
 end)
 
