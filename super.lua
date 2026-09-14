@@ -131,10 +131,10 @@ for _, data in ipairs(miniButtonsData) do
     btn.Name = "MiniBtn_" .. data.id
     btn.Size = UDim2.new(0, 38, 0, 38)
     btn.Position = UDim2.new(0, data.col * 44, 0, data.row * 44)
-    btn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
-    btn.BackgroundTransparency = 0.35
+    btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+    btn.BackgroundTransparency = 1
     btn.Text = data.icon
-    btn.TextSize = 14
+    btn.TextSize = 12.5
     btn.AutoButtonColor = false
     btn.Visible = true
     btn.Parent = ArenaContainer
@@ -144,9 +144,10 @@ for _, data in ipairs(miniButtonsData) do
     corner.Parent = btn
 
     local stroke = Instance.new("UIStroke")
-    stroke.Thickness = 2.5
-    stroke.Color = Color3.fromRGB(255, 255, 255) -- Mặc định viền trắng
-    stroke.Transparency = 0.1
+    stroke.Thickness = 2
+    stroke.Color = Color3.fromRGB(255, 255, 255)
+    stroke.Transparency = 0.3
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
     stroke.Parent = btn
 
     miniStrokes[btn] = stroke
@@ -167,12 +168,12 @@ for _, data in ipairs(miniButtonsData) do
 
         if isON then
             TweenService:Create(stroke, TweenInfo.new(0.2), {
-                Color = Color3.fromRGB(48, 209, 88) -- Viền xanh lá khi bật
+                Color = Color3.fromRGB(48, 209, 88)
             }):Play()
             startChunkTeleport(data.xyz, btn)
         else
             TweenService:Create(stroke, TweenInfo.new(0.2), {
-                Color = Color3.fromRGB(255, 255, 255) -- Viền trắng khi tắt
+                Color = Color3.fromRGB(255, 255, 255)
             }):Play()
             stopTeleport()
         end
@@ -229,14 +230,13 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
 end)
 
 -- =================================================================
--- GOD MODE LOGIC CHUẨN CỦA BẠN (CLONE HUMANOID)
+-- GOD MODE LOGIC CHUẨN (CLONE HUMANOID)
 -- =================================================================
 local function toggleGodMode(state)
     local character = LocalPlayer.Character
     if not character then return end
     
     if state then
-        -- Cất tất cả tool đang cầm vào balo trước khi clone để tránh lỗi script tool
         for _, tool in ipairs(character:GetChildren()) do
             if tool:IsA("Tool") then
                 tool.Parent = LocalPlayer.Backpack
@@ -263,7 +263,6 @@ local function toggleGodMode(state)
             end
         end)
     else
-        -- TẮT: Trở lại trạng thái bình thường của game
         LocalPlayer:LoadCharacter()
     end
 end
@@ -525,7 +524,7 @@ function iOS26Glass:CreateWindow(titleText)
     local MainStroke = Instance.new("UIStroke")
     MainStroke.Thickness = 1.2
     MainStroke.Color = Color3.fromRGB(255, 255, 255)
-    MainStroke.Transparency = 0.3
+    MainStroke.Transparency = 0.6
     MainStroke.Parent = MainFrame
 
     local MainGradient = Instance.new("UIGradient")
@@ -607,7 +606,7 @@ function iOS26Glass:CreateWindow(titleText)
     local SideStroke = Instance.new("UIStroke")
     SideStroke.Thickness = 1
     SideStroke.Color = Color3.fromRGB(255, 255, 255)
-    SideStroke.Transparency = 0.35
+    SideStroke.Transparency = 0.65
     SideStroke.Parent = Sidebar
 
     local TabHolder = Instance.new("ScrollingFrame")
@@ -651,7 +650,7 @@ function iOS26Glass:CreateWindow(titleText)
     local AvatarStroke = Instance.new("UIStroke")
     AvatarStroke.Thickness = 1
     AvatarStroke.Color = Color3.fromRGB(255, 255, 255)
-    AvatarStroke.Transparency = 0.35
+    AvatarStroke.Transparency = 0.65
     AvatarStroke.Parent = AvatarImage
 
     task.spawn(function()
@@ -844,7 +843,7 @@ function iOS26Glass:CreateWindow(titleText)
             local Stroke = Instance.new("UIStroke")
             Stroke.Thickness = 1.5
             Stroke.Color = Color3.fromRGB(255, 255, 255)
-            Stroke.Transparency = 0.3
+            Stroke.Transparency = 0.6
             Stroke.Parent = BtnFrame
 
             BtnFrame.MouseButton1Click:Connect(function()
@@ -868,11 +867,10 @@ function iOS26Glass:CreateWindow(titleText)
             TCorner.CornerRadius = UDim.new(0, 10)
             TCorner.Parent = ToggleFrame
 
-            -- VIỀN NÚT LIQUID GLASS (TRẮNG KHI TẮT, XANH LÁ KHI BẬT)
             local TStroke = Instance.new("UIStroke")
             TStroke.Thickness = 1.5
-            TStroke.Color = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
-            TStroke.Transparency = 0.2
+            TStroke.Color = Color3.fromRGB(255, 255, 255)
+            TStroke.Transparency = 0.5
             TStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             TStroke.Parent = ToggleFrame
 
@@ -923,10 +921,6 @@ function iOS26Glass:CreateWindow(titleText)
                 local targetPos = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
                 local targetBg = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
                 local targetTrans = toggled and 0.25 or 0.6
-                local targetStrokeColor = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
-
-                -- Đổi màu viền khung
-                TweenService:Create(TStroke, TweenInfo.new(0.25), {Color = targetStrokeColor}):Play()
 
                 TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
                     Size = UDim2.new(0, 24, 0, 14),
@@ -960,7 +954,7 @@ function iOS26Glass:CreateWindow(titleText)
             local SStroke = Instance.new("UIStroke")
             SStroke.Thickness = 1
             SStroke.Color = Color3.fromRGB(255, 255, 255)
-            SStroke.Transparency = 0.3
+            SStroke.Transparency = 0.6
             SStroke.Parent = SliderFrame
 
             local Label = Instance.new("TextLabel")
@@ -1073,11 +1067,10 @@ end
 -- =================================================================
 local Library = iOS26Glass:CreateWindow("Dragon Nova Hub")
 
-local MainTab     = Library:AddTab("Main")
-local ArenaTab    = Library:AddTab("Arena")
-local BypassTab   = Library:AddTab("Bypass")
-local SettingsTab = Library:AddTab("Settings")
-local MiscTab     = Library:AddTab("Misc")
+local MainTab   = Library:AddTab("Main")
+local ArenaTab  = Library:AddTab("Arena")
+local BypassTab = Library:AddTab("Bypass")
+local MiscTab   = Library:AddTab("Misc")
 
 -- TAB MAIN
 MainTab:AddToggle("Auto Steal", autoSteal, function(val)
@@ -1089,6 +1082,14 @@ MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     if not val then
         autoZoneState = 0
     end
+end)
+
+MainTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
+    speedVal = val
+end)
+
+MainTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
+    chunkVal = val
 end)
 
 -- TAB ARENA
@@ -1112,7 +1113,7 @@ for _, data in ipairs(miniButtonsData) do
     end)
 end
 
--- TAB BYPASS (ĐÃ CẬP NHẬT GOD MODE THEO ĐÚNG ĐOẠN SCRIPT BẠN CẦN)
+-- TAB BYPASS
 BypassTab:AddToggle("God Mode", false, function(val)
     godModeActive = val
     toggleGodMode(val)
@@ -1143,15 +1144,6 @@ end)
 
 BypassTab:AddToggle("Anti Stun", antiStun, function(val)
     antiStun = val
-end)
-
--- TAB SETTINGS
-SettingsTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
-    speedVal = val
-end)
-
-SettingsTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
-    chunkVal = val
 end)
 
 -- TAB MISC
