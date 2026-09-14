@@ -267,7 +267,7 @@ end
 
 local function scanTraps()
     local debris = workspace:FindFirstChild("__DEBRIS")
-    if not debris me then return end
+    if not debris then return end
     for _, child in ipairs(debris:GetChildren()) do
         for _, desc in ipairs(child:GetDescendants()) do if desc:IsA("BasePart") then disableTrapPart(desc) end end
         if child:IsA("BasePart") then disableTrapPart(child) end
@@ -411,14 +411,13 @@ for _, data in ipairs(miniButtonsData) do
     local btn = Instance.new("TextButton")
     btn.Name = "MiniBtn_" .. data.id
     btn.Size = UDim2.new(0, 38, 0, 38)
-    -- Tự động tính vị trí X, Y theo Cột (0-3) và Hàng (0-1)
     btn.Position = UDim2.new(0, data.col * 44, 0, data.row * 44)
     btn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
     btn.BackgroundTransparency = 0.35
     btn.Text = data.icon
     btn.TextSize = 14
     btn.AutoButtonColor = false
-    btn.Visible = true -- Hiển thị trực tiếp trên màn hình
+    btn.Visible = true
     btn.Parent = ArenaContainer
 
     local corner = Instance.new("UICorner")
@@ -438,7 +437,6 @@ for _, data in ipairs(miniButtonsData) do
     btn.MouseButton1Click:Connect(function()
         local isON = not buttonStates[btn]
 
-        -- Tắt trạng thái viền của tất cả các nút khác
         for otherBtn, otherStroke in pairs(miniStrokes) do
             buttonStates[otherBtn] = false
             TweenService:Create(otherStroke, TweenInfo.new(0.2), {
@@ -1093,7 +1091,7 @@ MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     end
 end)
 
--- TAB ARENA (TOGGLE ẨN/HIỆN CẢ CỤM NÚT ARENA HOẶC NÚT LẺ)
+-- TAB ARENA
 ArenaTab:AddToggle("Hiện cụm nút Arena", true, function(state)
     ArenaContainer.Visible = state
 end)
