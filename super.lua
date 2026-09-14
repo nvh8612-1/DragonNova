@@ -311,7 +311,6 @@ else
     MiniGui.Parent = CoreGui
 end
 
--- Khung chứa cố định ở góc trên bên phải màn hình
 local ArenaContainer = Instance.new("Frame")
 ArenaContainer.Name = "ArenaContainer"
 ArenaContainer.Size = UDim2.new(0, 180, 0, 85)
@@ -320,19 +319,18 @@ ArenaContainer.Position = UDim2.new(1, -20, 0, 10)
 ArenaContainer.BackgroundTransparency = 1
 ArenaContainer.Parent = MiniGui
 
--- Sắp xếp nút theo đúng 2 hàng chuẩn ảnh khoanh tròn
 local miniButtonsData = {
     -- HÀNG TRÊN (Row = 0)
-    { id = "Base",     icon = "🏠",   col = 0, row = 0, xyz = baseCFrame or CFrame.new(519.01, 70.27, -362.74) }, -- Ô Xám
-    { id = "Volcano",  icon = "🌋",   col = 1, row = 0, xyz = CFrame.new(1878, 70, -395) },                      -- Ô Đỏ 1
-    { id = "Ocean",    icon = "🌊",   col = 2, row = 0, xyz = CFrame.new(2281, 70, -329) },                      -- Ô Đỏ 2
-    { id = "Dino",     icon = "🦖",   col = 3, row = 0, xyz = CFrame.new(2815, 70, -396) },                      -- Ô Đỏ 3
+    { id = "Base",     icon = "🏠",   col = 0, row = 0, xyz = baseCFrame or CFrame.new(519.01, 70.27, -362.74) },
+    { id = "Volcano",  icon = "🌋",   col = 1, row = 0, xyz = CFrame.new(1878, 70, -395) },
+    { id = "Ocean",    icon = "🌊",   col = 2, row = 0, xyz = CFrame.new(2281, 70, -329) },
+    { id = "Dino",     icon = "🦖",   col = 3, row = 0, xyz = CFrame.new(2815, 70, -396) },
 
     -- HÀNG ĐƯỚI (Row = 1)
-    { id = "AngelDev", icon = "👼😈", col = 0, row = 1, xyz = CFrame.new(5662, 70, -344) },                      -- Ô Xanh lá
-    { id = "Galaxy",   icon = "🌌",   col = 1, row = 1, xyz = CFrame.new(3393, 70, -327) },                      -- Ô Vàng 1
-    { id = "Flower",   icon = "🌸",   col = 2, row = 1, xyz = CFrame.new(4030, 70, -398) },                      -- Ô Vàng 2
-    { id = "Lizard",   icon = "🦎",   col = 3, row = 1, xyz = CFrame.new(4797, 70, -330) }                       -- Ô Vàng 3
+    { id = "AngelDev", icon = "👼😈", col = 0, row = 1, xyz = CFrame.new(5662, 70, -344) },
+    { id = "Galaxy",   icon = "🌌",   col = 1, row = 1, xyz = CFrame.new(3393, 70, -327) },
+    { id = "Flower",   icon = "🌸",   col = 2, row = 1, xyz = CFrame.new(4030, 70, -398) },
+    { id = "Lizard",   icon = "🦎",   col = 3, row = 1, xyz = CFrame.new(4797, 70, -330) }
 }
 
 local activeTeleportToken = 0
@@ -368,7 +366,6 @@ local function startChunkTeleport(targetCF, sourceBtn)
                             hrp.CFrame = targetCF
                             activeTeleportToken = 0
                             
-                            -- ĐẾN TỌA ĐỘ -> VIỀN CHUYỂN VỀ TRẮNG (OFF)
                             if sourceBtn and miniStrokes[sourceBtn] then
                                 buttonStates[sourceBtn] = false
                                 TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
@@ -398,7 +395,6 @@ triggerMiniButtonByName = function(idName)
     end
 
     buttonStates[obj.btn] = true
-    -- BẬT -> VIỀN XANH LÁ
     TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
         Color = Color3.fromRGB(48, 209, 88)
     }):Play()
@@ -406,7 +402,6 @@ triggerMiniButtonByName = function(idName)
     startChunkTeleport(obj.data.xyz, obj.btn)
 end
 
--- Tạo các nút Liquid Glass dạng hình tròn 38x38
 for _, data in ipairs(miniButtonsData) do
     local btn = Instance.new("TextButton")
     btn.Name = "MiniBtn_" .. data.id
@@ -426,7 +421,7 @@ for _, data in ipairs(miniButtonsData) do
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 2.5
-    stroke.Color = Color3.fromRGB(255, 255, 255) -- Mặc định TRẮNG (OFF)
+    stroke.Color = Color3.fromRGB(255, 255, 255)
     stroke.Transparency = 0.1
     stroke.Parent = btn
 
@@ -447,14 +442,12 @@ for _, data in ipairs(miniButtonsData) do
         buttonStates[btn] = isON
 
         if isON then
-            -- BẬT -> Viền XANH LÁ
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(48, 209, 88)
             }):Play()
             
             startChunkTeleport(data.xyz, btn)
         else
-            -- TẮT -> Viền TRẮNG
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(255, 255, 255)
             }):Play()
@@ -1074,10 +1067,11 @@ end
 -- =================================================================
 local Library = iOS26Glass:CreateWindow("Dragon Nova Hub")
 
-local MainTab   = Library:AddTab("Main")
-local ArenaTab  = Library:AddTab("Arena")
-local BypassTab = Library:AddTab("Bypass")
-local MiscTab   = Library:AddTab("Misc")
+local MainTab     = Library:AddTab("Main")
+local ArenaTab    = Library:AddTab("Arena")
+local BypassTab   = Library:AddTab("Bypass")
+local SettingsTab = Library:AddTab("Settings")
+local MiscTab     = Library:AddTab("Misc")
 
 -- TAB MAIN
 MainTab:AddToggle("Auto Steal", autoSteal, function(val)
@@ -1145,16 +1139,96 @@ BypassTab:AddToggle("Anti Stun", antiStun, function(val)
     antiStun = val
 end)
 
--- TAB MISC / SETTINGS
-MiscTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
+-- TAB SETTINGS (CHỨA SPEED VÀ CHUNK)
+SettingsTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
     speedVal = val
 end)
 
-MiscTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
+SettingsTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
     chunkVal = val
 end)
 
-MiscTab:AddButton("Server Hop NHOIIIX", function()
+-- TAB MISC (CHỨA FIX LAG VÀ SERVER HOP)
+MiscTab:AddButton("Fix Lag / Boost FPS", function()
+    pcall(function()
+        local Workspace = game:GetService("Workspace")
+        local Lighting = game:GetService("Lighting")
+
+        local function optimize(obj)
+            pcall(function()
+                if obj:IsA("ParticleEmitter")
+                or obj:IsA("Trail")
+                or obj:IsA("Beam")
+                or obj:IsA("Smoke")
+                or obj:IsA("Fire")
+                or obj:IsA("Sparkles") then
+                    obj.Enabled = false
+                elseif obj:IsA("Explosion") then
+                    obj.BlastPressure = 0
+                    obj.BlastRadius = 0
+                elseif obj:IsA("BasePart") then
+                    obj.CastShadow = false
+                    obj.Material = Enum.Material.SmoothPlastic
+                    obj.Reflectance = 0
+                elseif obj:IsA("Texture") or obj:IsA("Decal") then
+                    obj.Texture = ""
+                elseif obj:IsA("MeshPart") then
+                    obj.TextureID = ""
+                elseif obj:IsA("SpecialMesh") then
+                    obj.TextureId = ""
+                elseif obj:IsA("SurfaceAppearance") then
+                    obj:Destroy()
+                end
+            end)
+        end
+
+        pcall(function()
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+            Lighting.Brightness = 1
+            Lighting.EnvironmentDiffuseScale = 0
+            Lighting.EnvironmentSpecularScale = 0
+
+            for _, effect in ipairs(Lighting:GetChildren()) do
+                if effect:IsA("BloomEffect")
+                or effect:IsA("ColorCorrectionEffect")
+                or effect:IsA("SunRaysEffect")
+                or effect:IsA("DepthOfFieldEffect")
+                or effect:IsA("BlurEffect") then
+                    effect.Enabled = false
+                end
+            end
+        end)
+
+        pcall(function()
+            local Terrain = Workspace.Terrain
+            Terrain.WaterWaveSize = 0
+            Terrain.WaterWaveSpeed = 0
+            Terrain.WaterReflectance = 0
+            Terrain.WaterTransparency = 1
+        end)
+
+        for _, obj in ipairs(game:GetDescendants()) do
+            optimize(obj)
+        end
+
+        if not getgenv().FTGS_FixLagConnection then
+            getgenv().FTGS_FixLagConnection = game.DescendantAdded:Connect(function(obj)
+                task.defer(function()
+                    optimize(obj)
+                end)
+            end)
+        end
+
+        pcall(function()
+            settings().Rendering.QualityLevel = Enum.QualityLevel.Level01
+        end)
+
+        print("[FTGS] Fix Lag / Boost FPS: ON")
+    end)
+end)
+
+MiscTab:AddButton("Server Hop NhoiiiX", function()
     pcall(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/Nhoiii/NhoiiiX-Hub-Dev/refs/heads/main/NhoiiiHopSv.lua"))()
     end)
