@@ -25,283 +25,8 @@ local chunkVal = 12
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
 
 -- =================================================================
--- LOGIC AUTO ZONE (3 BƯỚC)
--- =================================================================
-local autoZoneState = 0 -- 0: Chuẩn bị | 1: Đã bị stun/knockback sau khi nhặt | 2: Đang cooldown
-local lastPromptTime = 0
-
-local function monitorCharacterStun(char)
-    if not char then return end
-    local hum = char:WaitForChild("Humanoid", 5)
-    if not hum then return end
-
-    hum.StateChanged:Connect(function(_, newState)
-        if newState == Enum.HumanoidStateType.Physics 
-        or newState == Enum.HumanoidStateType.Ragdoll 
-        or newState == Enum.HumanoidStateType.FallingDown 
-        or newState == Enum.HumanoidStateType.PlatformStanding then
-            if autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
-                autoZoneState = 1
-            end
-        end
-    end)
-
-    hum:GetPropertyChangedSignal("Sit"):Connect(function()
-        if hum.Sit and autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
-            autoZoneState = 1
-        end
-    end)
-end
-
-if LocalPlayer.Character then monitorCharacterStun(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(monitorCharacterStun)
-
-local triggerMiniButtonByName
-
-ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
-    if playerWhoTriggered == LocalPlayer then
-        lastPromptTime = os.clock()
-
-        if autoZoneActive then
-            if autoZoneState == 1 then
-                autoZoneState = 2
-
-                if triggerMiniButtonByName then
-                    triggerMiniButtonByName("Base")
-                end
-
-                task.spawn(function()
-                    task.wait(10)
-                    autoZoneState = 0
-                end)
-            end
-        end
-    end
-end)
-
--- GOD MODE LOGIC
-local function toggleGodMode(state)
-    local character = LocalPlayer.Character
-    if not character then return end
-    
-    if state then
-        for _, tool in ipairs(character:GetChildren()) do
-            if tool:IsA("Tool") then
-                tool.Parent = LocalPlayer.Backpack
-            end
-        end
-        
-        local humanoid = character:FindFirstChildOfClass("Humanoid")
-        local rootPart = character:FindFirstChild("HumanoidRootPart")
-        if not humanoid or not rootPart then return end
-        
-        local currentCFrame = rootPart.CFrame
-        
-        local newHumanoid = humanoid:Clone()
-        newHumanoid.Parent = character
-        humanoid:Destroy()
-        
-        LocalPlayer.Character = nil
-        LocalPlayer.Character = character
-        workspace.CurrentCamera.CameraSubject = newHumanoid
-        
-        task.defer(function()
-            if rootPart then
-                rootPart.CFrame = currentCFrame
-            end
-        end)
-    else
-        LocalPlayer:LoadCharacter()
-    end
-end
-
--- PROXIMITY PROMPT & BYPASS
-local shownPrompts = {}
-
-local function bypassPrompt(prompt, maxDist)
-    if prompt and prompt:IsA("ProximityPrompt") then
-        prompt.HoldDuration = 0
-        prompt.RequiresLineOfSight = false
-        prompt.MaxActivationDistance = maxDist or 25
-    end
-end
-
-local function getPromptPosition(prompt)
-    local parent = prompt.Parent
-    if not parent then return nil end
-    if parent:IsA("BasePart") then return parent.Position
-    elseif parent:IsA("Attachment") then return parent.WorldPosition
-    elseif parent:IsA("Model") then return parent:GetPivot().Position end
-    return nil
-end
-
-local function triggerPrompt(prompt)
-    if not prompt or not prompt.Enabled then return end
-    if fireproximityprompt then
-        pcall(function() fireproximityprompt(prompt) end)
-    else
-        pcall(function() prompt:InputHoldBegin() task.wait(0.1) prompt:InputHoldEnd() end)
-    end
-end
-
-ProximityPromptService.PromptShown:Connect(function(prompt)
-    bypassPrompt(prompt, 25)
-    shownPrompts[prompt] = true
-    if autoSteal then triggerPrompt(prompt) end
-end)
-
-ProximityPromptService.PromptHidden:Connect(function(prompt)
-    shownPrompts[prompt] = nil
-end)
-
-workspace.DescendantAdded:Connect(function(descendant)
-    if descendant:IsA("ProximityPrompt") then 
-        bypassPrompt(descendant, 25) 
-    end
-end)
-
-task.spawn(function()
-    while true do
-        task.wait(0.1)
-        if not autoSteal then continue end
-
-        pcall(function()
-            local char = LocalPlayer.Character
-            if not char then return end
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-
-            for prompt, _ in pairs(shownPrompts) do
-                if prompt and prompt.Enabled and prompt.Parent then
-                    local pos = getPromptPosition(prompt)
-                    if pos then
-                        if (hrp.Position - pos).Magnitude <= 25 then
-                            triggerPrompt(prompt)
-                        end
-                    else
-                        triggerPrompt(prompt)
-                    end
-                end
-            end
-        end)
-    end
-end)
-
--- ANTI STUN & KNOCKBACK
-local function setupCharacter(char)
-    if not char then return end
-    local hum = char:WaitForChild("Humanoid", 5)
-    if hum then
-        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-
-        hum.StateChanged:Connect(function(_, newState)
-            if antiStun and (newState == Enum.HumanoidStateType.Physics or newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.FallingDown) then
-                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                local hrp = char:FindFirstChild("HumanoidRootPart")
-                if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
-            end
-        end)
-    end
-end
-
-if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(setupCharacter)
-
-RunService.Stepped:Connect(function()
-    if not antiStun then return end
-    pcall(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        local hrp = char:FindFirstChild("HumanoidRootPart")
-        if hum then
-            for _, motor in ipairs(char:GetDescendants()) do
-                if motor:IsA("Motor6D") and not motor.Enabled then motor.Enabled = true end
-            end
-            if hum.Sit then hum.Sit = false end
-            if hum.PlatformStand then hum.PlatformStand = false end
-            hum.AutoRotate = true
-        end
-        if hrp and hrp.Anchored then hrp.Anchored = false end
-    end)
-end)
-
--- HITBOX & ANTI TRAP
-local trapESP = {}
-local function createTrapESP(part)
-    if not antiTrapActive or not part or not part:IsA("BasePart") or trapESP[part] then return end
-    local highlight = Instance.new("Highlight")
-    highlight.Name = "DragonNova_TrapESP"
-    highlight.Adornee = part
-    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-    highlight.FillTransparency = 0.6
-    highlight.OutlineTransparency = 0.2
-    highlight.FillColor = Color3.fromRGB(255, 60, 60)
-    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
-    highlight.Parent = part
-    trapESP[part] = highlight
-end
-
-local function removeTrapESP()
-    for part, highlight in pairs(trapESP) do
-        pcall(function() if highlight then highlight:Destroy() end end)
-        trapESP[part] = nil
-    end
-end
-
-local function disableTrapPart(part)
-    if not part or not part:IsA("BasePart") then return end
-    pcall(function()
-        part.CanTouch = false
-        part.CanCollide = false
-        part.CanQuery = false
-        if string.lower(part.Name) == "hitbox" then part.Size = Vector3.new(0.001, 0.001, 0.001) end
-        for _, child in ipairs(part:GetDescendants()) do
-            if child:IsA("TouchTransmitter") or child.ClassName == "TouchInterest" then child:Destroy() end
-        end
-        if antiTrapActive then createTrapESP(part) end
-    end)
-end
-
-local function scanTraps()
-    local debris = workspace:FindFirstChild("__DEBRIS")
-    if not debris then return end
-    for _, child in ipairs(debris:GetChildren()) do
-        for _, desc in ipairs(child:GetDescendants()) do if desc:IsA("BasePart") then disableTrapPart(desc) end end
-        if child:IsA("BasePart") then disableTrapPart(child) end
-    end
-end
-
-task.spawn(function()
-    while true do task.wait(0.1) if antiTrapActive then pcall(scanTraps) end end
-end)
-
-task.spawn(function()
-    while true do
-        task.wait(0.3)
-        if hitboxActive then
-            pcall(function()
-                for _, player in ipairs(Players:GetPlayers()) do
-                    if player ~= LocalPlayer and player.Character then
-                        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-                        if hrp then
-                            hrp.Size = Vector3.new(15, 15, 15)
-                            hrp.Transparency = 0.75
-                            hrp.BrickColor = BrickColor.new("Really red")
-                            hrp.Material = Enum.Material.Neon
-                            hrp.CanCollide = false
-                        end
-                    end
-                end
-            end)
-        end
-    end
-end)
-
--- =================================================================
--- HỆ THỐNG NÚT MINI ARENA (CẤU TRÚC 2 HÀNG X 4 CỘT CHUẨN BẢN VẼ)
+-- HỆ THỐNG NÚT MINI ARENA (CẤU TRÚC 2 HÀNG X 4 CỘT)
+-- Khai báo trước để triggerMiniButtonByName không bị nil
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -383,7 +108,8 @@ local function startChunkTeleport(targetCF, sourceBtn)
     end)
 end
 
-triggerMiniButtonByName = function(idName)
+-- ĐỊNH NGHĨA HÀM KÍCH HOẠT NÚT THEO TÊN
+local function triggerMiniButtonByName(idName)
     local obj = miniButtonObjects[idName]
     if not obj then return end
 
@@ -456,6 +182,271 @@ for _, data in ipairs(miniButtonsData) do
         end
     end)
 end
+
+-- =================================================================
+-- LOGIC AUTO ZONE (3 BƯỚC)
+-- =================================================================
+local autoZoneState = 0
+local lastPromptTime = 0
+
+local function monitorCharacterStun(char)
+    if not char then return end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+
+    hum.StateChanged:Connect(function(_, newState)
+        if newState == Enum.HumanoidStateType.Physics 
+        or newState == Enum.HumanoidStateType.Ragdoll 
+        or newState == Enum.HumanoidStateType.FallingDown 
+        or newState == Enum.HumanoidStateType.PlatformStanding then
+            if autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
+                autoZoneState = 1
+            end
+        end
+    end)
+
+    hum:GetPropertyChangedSignal("Sit"):Connect(function()
+        if hum.Sit and autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
+            autoZoneState = 1
+        end
+    end)
+end
+
+if LocalPlayer.Character then monitorCharacterStun(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(monitorCharacterStun)
+
+ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
+    if playerWhoTriggered == LocalPlayer then
+        lastPromptTime = os.clock()
+
+        if autoZoneActive then
+            if autoZoneState == 1 then
+                autoZoneState = 2
+
+                triggerMiniButtonByName("Base")
+
+                task.spawn(function()
+                    task.wait(10)
+                    autoZoneState = 0
+                end)
+            end
+        end
+    end
+end)
+
+-- GOD MODE LOGIC (GIỮ NGUYÊN CƠ CHẾ CỦA BẠN)
+local function toggleGodMode(state)
+    local character = LocalPlayer.Character
+    if not character then return end
+    
+    if state then
+        for _, tool in ipairs(character:GetChildren()) do
+            if tool:IsA("Tool") then
+                tool.Parent = LocalPlayer.Backpack
+            end
+        end
+        
+        local rootPart = character:FindFirstChild("HumanoidRootPart")
+        local currentCFrame = rootPart and rootPart.CFrame
+        
+        LocalPlayer.Character = nil
+        LocalPlayer.Character = character
+        
+        task.wait(0.2)
+        if rootPart and currentCFrame then
+            rootPart.CFrame = currentCFrame
+        end
+    else
+        LocalPlayer:LoadCharacter()
+    end
+end
+
+-- PROXIMITY PROMPT & BYPASS
+local shownPrompts = {}
+
+local function bypassPrompt(prompt, maxDist)
+    if prompt and prompt:IsA("ProximityPrompt") then
+        prompt.HoldDuration = 0
+        prompt.RequiresLineOfSight = false
+        prompt.MaxActivationDistance = maxDist or 25
+    end
+end
+
+local function getPromptPosition(prompt)
+    local parent = prompt.Parent
+    if not parent then return nil end
+    if parent:IsA("BasePart") then return parent.Position
+    elseif parent:IsA("Attachment") then return parent.WorldPosition
+    elseif parent:IsA("Model") then return parent:GetPivot().Position end
+    return nil
+end
+
+local function triggerPrompt(prompt)
+    if not prompt or not prompt.Enabled then return end
+    if fireproximityprompt then
+        pcall(function() fireproximityprompt(prompt) end)
+    else
+        pcall(function() prompt:InputHoldBegin() task.wait(0.1) prompt:InputHoldEnd() end)
+    end
+end
+
+ProximityPromptService.PromptShown:Connect(function(prompt)
+    bypassPrompt(prompt, 25)
+    shownPrompts[prompt] = true
+    if autoSteal then triggerPrompt(prompt) end
+end)
+
+ProximityPromptService.PromptHidden:Connect(function(prompt)
+    shownPrompts[prompt] = nil
+end)
+
+workspace.DescendantAdded:Connect(function(descendant)
+    if descendant:IsA("ProximityPrompt") then 
+        bypassPrompt(descendant, 25) 
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+        if not autoSteal then continue end
+
+        pcall(function()
+            local char = LocalPlayer.Character
+            if not char then return end
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if not hrp then return end
+
+            for prompt, _ in pairs(shownPrompts) do
+                if prompt and prompt:IsDescendantOf(workspace) and prompt.Enabled then
+                    local pos = getPromptPosition(prompt)
+                    if pos then
+                        if (hrp.Position - pos).Magnitude <= 25 then
+                            triggerPrompt(prompt)
+                        end
+                    else
+                        triggerPrompt(prompt)
+                    end
+                else
+                    shownPrompts[prompt] = nil
+                end
+            end
+        end)
+    end
+end)
+
+-- ANTI STUN & KNOCKBACK
+local function setupCharacter(char)
+    if not char then return end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+
+        hum.StateChanged:Connect(function(_, newState)
+            if antiStun and (newState == Enum.HumanoidStateType.Physics or newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.FallingDown) then
+                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
+            end
+        end)
+    end
+end
+
+if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(setupCharacter)
+
+RunService.Stepped:Connect(function()
+    if not antiStun then return end
+    pcall(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        local hrp = char:FindFirstChild("HumanoidRootPart")
+        if hum then
+            for _, motor in ipairs(char:GetDescendants()) do
+                if motor:IsA("Motor6D") and not motor.Enabled then motor.Enabled = true end
+            end
+            if hum.Sit then hum.Sit = false end
+            if hum.PlatformStand then hum.PlatformStand = false end
+            hum.AutoRotate = true
+        end
+        if hrp and hrp.Anchored then hrp.Anchored = false end
+    end)
+end)
+
+-- HITBOX (GIỮ NGUYÊN CODE CỦA BẠN) & ANTI TRAP
+local trapESP = {}
+local function createTrapESP(part)
+    if not antiTrapActive or not part or not part:IsA("BasePart") or trapESP[part] then return end
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "DragonNova_TrapESP"
+    highlight.Adornee = part
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.FillTransparency = 0.6
+    highlight.OutlineTransparency = 0.2
+    highlight.FillColor = Color3.fromRGB(255, 60, 60)
+    highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+    highlight.Parent = part
+    trapESP[part] = highlight
+end
+
+local function removeTrapESP()
+    for part, highlight in pairs(trapESP) do
+        pcall(function() if highlight then highlight:Destroy() end end)
+        trapESP[part] = nil
+    end
+end
+
+local function disableTrapPart(part)
+    if not part or not part:IsA("BasePart") then return end
+    pcall(function()
+        part.CanTouch = false
+        part.CanCollide = false
+        part.CanQuery = false
+        if string.lower(part.Name) == "hitbox" then part.Size = Vector3.new(0.001, 0.001, 0.001) end
+        for _, child in ipairs(part:GetDescendants()) do
+            if child:IsA("TouchTransmitter") or child.ClassName == "TouchInterest" then child:Destroy() end
+        end
+        if antiTrapActive then createTrapESP(part) end
+    end)
+end
+
+local function scanTraps()
+    local debris = workspace:FindFirstChild("__DEBRIS")
+    if not debris then return end
+    for _, child in ipairs(debris:GetChildren()) do
+        for _, desc in ipairs(child:GetDescendants()) do if desc:IsA("BasePart") then disableTrapPart(desc) end end
+        if child:IsA("BasePart") then disableTrapPart(child) end
+    end
+end
+
+task.spawn(function()
+    while true do task.wait(0.1) if antiTrapActive then pcall(scanTraps) end end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if hitboxActive then
+            pcall(function()
+                for _, player in ipairs(Players:GetPlayers()) do
+                    if player ~= LocalPlayer and player.Character then
+                        local hrp = player.Character:FindFirstChild("HumanoidRootPart")
+                        if hrp then
+                            hrp.Size = Vector3.new(15, 15, 15)
+                            hrp.Transparency = 0.75
+                            hrp.BrickColor = BrickColor.new("Really red")
+                            hrp.Material = Enum.Material.Neon
+                            hrp.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
 
 -- =================================================================
 -- iOS 26 LIQUID GLASS UI ENGINE
