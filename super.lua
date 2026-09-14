@@ -1,4 +1,4 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub - Full Script Auto Zone & Mini Arena Buttons)
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub - Full Script Auto Zone & Mini Arena Toggles)
 local iOS26Glass = {}
 
 local CoreGui = game:GetService("CoreGui")
@@ -15,7 +15,7 @@ local LocalPlayer = Players.LocalPlayer
 -- =================================================================
 local autoSteal = false
 local antiStun = true
-local autoZoneActive = false -- Đã đổi từ autoEggActive sang autoZoneActive
+local autoZoneActive = false
 local hitboxActive = true
 local antiTrapActive = true
 local godModeActive = false
@@ -41,7 +41,6 @@ local function monitorCharacterStun(char)
         or newState == Enum.HumanoidStateType.Ragdoll 
         or newState == Enum.HumanoidStateType.FallingDown 
         or newState == Enum.HumanoidStateType.PlatformStanding then
-            -- Bước 1: Phát hiện bị roll ngã / stun / knockback trong vòng 3.5s sau khi bấm prompt
             if autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
                 autoZoneState = 1
             end
@@ -58,24 +57,20 @@ end
 if LocalPlayer.Character then monitorCharacterStun(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(monitorCharacterStun)
 
--- Forward declaration cho hàm kích hoạt nút Base từ xa
 local triggerMiniButtonByName
 
--- Lắng nghe sự kiện kích hoạt ProximityPrompt
 ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
     if playerWhoTriggered == LocalPlayer then
         lastPromptTime = os.clock()
 
         if autoZoneActive then
-            -- Bước 2: Lần thứ 2 kích hoạt prompt sau khi bị stun -> Tự động kích hoạt nút Base
             if autoZoneState == 1 then
-                autoZoneState = 2 -- Chuyển sang trạng thái chờ cooldown
+                autoZoneState = 2
 
                 if triggerMiniButtonByName then
                     triggerMiniButtonByName("Base")
                 end
 
-                -- Bước 3: Sau 10 giây trở lại bước 1
                 task.spawn(function()
                     task.wait(10)
                     autoZoneState = 0
@@ -166,7 +161,6 @@ workspace.DescendantAdded:Connect(function(descendant)
     end
 end)
 
--- AUTO STEAL LOOP
 task.spawn(function()
     while true do
         task.wait(0.1)
@@ -319,14 +313,14 @@ else
 end
 
 local miniButtonsData = {
-    { id = "Base",     icon = "🏠",   screenX = 470, screenY = 11,  xyz = CFrame.new(519.01, 70.27, -362.74) },
-    { id = "AngelDev", icon = "👼😈", screenX = 470, screenY = -53, xyz = CFrame.new(5662, 70, -344) },
+    { id = "Base",     icon = "🏠",   screenX = 470, screenY = 11,  xyz = baseCFrame or CFrame.new(519.01, 70.27, -362.74) },
     { id = "Volcano",  icon = "🌋",   screenX = 534, screenY = -52, xyz = CFrame.new(1878, 70, -395) },
     { id = "Ocean",    icon = "🌊",   screenX = 601, screenY = -53, xyz = CFrame.new(2281, 70, -329) },
     { id = "Dino",     icon = "🦖",   screenX = 671, screenY = -52, xyz = CFrame.new(2815, 70, -396) },
     { id = "Galaxy",   icon = "🌌",   screenX = 538, screenY = 9,   xyz = CFrame.new(3393, 70, -327) },
     { id = "Flower",   icon = "🌸",   screenX = 666, screenY = 11,  xyz = CFrame.new(4030, 70, -398) },
     { id = "Lizard",   icon = "🦎",   screenX = 601, screenY = 10,  xyz = CFrame.new(4797, 70, -330) },
+    { id = "AngelDev", icon = "👼😈", screenX = 470, screenY = -53, xyz = CFrame.new(5662, 70, -344) }
 }
 
 local activeTeleportToken = 0
@@ -362,7 +356,7 @@ local function startChunkTeleport(targetCF, sourceBtn)
                             hrp.CFrame = targetCF
                             activeTeleportToken = 0
                             
-                            -- Đã tới đích -> Đổi viền về TRẮNG (OFF)
+                            -- ĐÃ TỚI ĐÍCH -> TỰ ĐỘNG CHUYỂN VIỀN VỀ TRẮNG (OFF)
                             if sourceBtn and miniStrokes[sourceBtn] then
                                 buttonStates[sourceBtn] = false
                                 TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
@@ -380,12 +374,12 @@ local function startChunkTeleport(targetCF, sourceBtn)
     end)
 end
 
--- Hàm kích hoạt nút từ xa dành cho Auto Zone
+-- Hàm kích hoạt nút từ xa cho Auto Zone
 triggerMiniButtonByName = function(idName)
     local obj = miniButtonObjects[idName]
     if not obj then return end
 
-    -- Tắt hiệu ứng của các nút khác
+    -- Tắt hiệu ứng viền của các nút khác
     for otherBtn, otherStroke in pairs(miniStrokes) do
         buttonStates[otherBtn] = false
         TweenService:Create(otherStroke, TweenInfo.new(0.2), {
@@ -394,7 +388,7 @@ triggerMiniButtonByName = function(idName)
     end
 
     buttonStates[obj.btn] = true
-    -- Bật viền XANH LÁ
+    -- Chuyển viền sang XANH LÁ (BẬT)
     TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
         Color = Color3.fromRGB(48, 209, 88)
     }):Play()
@@ -402,7 +396,7 @@ triggerMiniButtonByName = function(idName)
     startChunkTeleport(obj.data.xyz, obj.btn)
 end
 
--- Tạo giao diện các nút tròn Mini
+-- Tạo giao diện các nút tròn Mini (Ẩn mặc định, hiện khi Toggle trong Arena bật)
 for _, data in ipairs(miniButtonsData) do
     local btn = Instance.new("TextButton")
     btn.Name = "MiniBtn_" .. data.id
@@ -414,6 +408,7 @@ for _, data in ipairs(miniButtonsData) do
     btn.Text = data.icon
     btn.TextSize = 14
     btn.AutoButtonColor = false
+    btn.Visible = false -- Mặc định ẩn, bật Toggle trong Arena mới hiện
     btn.Parent = MiniGui
 
     local corner = Instance.new("UICorner")
@@ -422,7 +417,7 @@ for _, data in ipairs(miniButtonsData) do
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 2.5
-    stroke.Color = Color3.fromRGB(255, 255, 255) -- TRẮNG khi OFF
+    stroke.Color = Color3.fromRGB(255, 255, 255) -- Mặc định TRẮNG (OFF)
     stroke.Transparency = 0.1
     stroke.Parent = btn
 
@@ -443,14 +438,14 @@ for _, data in ipairs(miniButtonsData) do
         buttonStates[btn] = isON
 
         if isON then
-            -- Chuyển viền sang XANH LÁ khi BẬT
+            -- Viền XANH LÁ khi đang BẬT/BAY
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(48, 209, 88)
             }):Play()
             
             startChunkTeleport(data.xyz, btn)
         else
-            -- Chuyển viền về TRẮNG khi TẮT
+            -- Viền TRẮNG khi TẮT
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(255, 255, 255)
             }):Play()
@@ -1080,7 +1075,6 @@ MainTab:AddToggle("Auto Steal", autoSteal, function(val)
     autoSteal = val
 end)
 
--- Đã đổi tên Auto Pick -> Auto Zone
 MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     autoZoneActive = val
     if not val then
@@ -1088,10 +1082,24 @@ MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     end
 end)
 
--- TAB ARENA
+-- TAB ARENA (MỖI KHU VỰC LÀ MỘT TOGGLE - BẬT LÀ HIỆN NÚT TRÒN MÀN HÌNH)
 for _, data in ipairs(miniButtonsData) do
-    ArenaTab:AddButton(data.icon .. " Teleport " .. data.id, function()
-        triggerMiniButtonByName(data.id)
+    ArenaTab:AddToggle(data.icon .. " " .. data.id, false, function(state)
+        local obj = miniButtonObjects[data.id]
+        if obj and obj.btn then
+            obj.btn.Visible = state -- Hiện/Ẩn nút Mini tương ứng trên màn hình
+            
+            -- Nếu tắt toggle trong tab Arena thì cũng dừng bay và trả viền về Trắng
+            if not state then
+                if buttonStates[obj.btn] then
+                    buttonStates[obj.btn] = false
+                    stopTeleport()
+                    TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
+                        Color = Color3.fromRGB(255, 255, 255)
+                    }):Play()
+                end
+            end
+        end
     end)
 end
 
