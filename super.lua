@@ -1,4 +1,4 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub Edition - Full Script)
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub - Full Script Auto Zone & Mini Arena Buttons)
 local iOS26Glass = {}
 
 local CoreGui = game:GetService("CoreGui")
@@ -13,27 +13,77 @@ local LocalPlayer = Players.LocalPlayer
 -- =================================================================
 -- LOGIC TÍNH NĂNG (GAMEPLAY LOGIC)
 -- =================================================================
-local teleguiadoActive = false
-local teleguiadoToggleActive = false
 local autoSteal = false
 local antiStun = true
-local autoEggActive = false
+local autoZoneActive = false -- Đã đổi từ autoEggActive sang autoZoneActive
 local hitboxActive = true
 local antiTrapActive = true
 local godModeActive = false
-local flyToBaseActive = false
 
 local speedVal = 600
 local chunkVal = 12
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
-local currentStatus = "..."
 
-local updateStatusUI = function(text) end
+-- =================================================================
+-- LOGIC AUTO ZONE (3 BƯỚC)
+-- =================================================================
+local autoZoneState = 0 -- 0: Chuẩn bị | 1: Đã bị stun/knockback sau khi nhặt | 2: Đang cooldown
+local lastPromptTime = 0
 
-local function updateStatus(text)
-    currentStatus = text
-    updateStatusUI(text)
+-- Lắng nghe trạng thái nhân vật bị Stun / Knockback / Ragdoll
+local function monitorCharacterStun(char)
+    if not char then return end
+    local hum = char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+
+    hum.StateChanged:Connect(function(_, newState)
+        if newState == Enum.HumanoidStateType.Physics 
+        or newState == Enum.HumanoidStateType.Ragdoll 
+        or newState == Enum.HumanoidStateType.FallingDown 
+        or newState == Enum.HumanoidStateType.PlatformStanding then
+            -- Bước 1: Phát hiện bị roll ngã / stun / knockback trong vòng 3.5s sau khi bấm prompt
+            if autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
+                autoZoneState = 1
+            end
+        end
+    end)
+
+    hum:GetPropertyChangedSignal("Sit"):Connect(function()
+        if hum.Sit and autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
+            autoZoneState = 1
+        end
+    end)
 end
+
+if LocalPlayer.Character then monitorCharacterStun(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(monitorCharacterStun)
+
+-- Forward declaration cho hàm kích hoạt nút Base từ xa
+local triggerMiniButtonByName
+
+-- Lắng nghe sự kiện kích hoạt ProximityPrompt
+ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
+    if playerWhoTriggered == LocalPlayer then
+        lastPromptTime = os.clock()
+
+        if autoZoneActive then
+            -- Bước 2: Lần thứ 2 kích hoạt prompt sau khi bị stun -> Tự động kích hoạt nút Base
+            if autoZoneState == 1 then
+                autoZoneState = 2 -- Chuyển sang trạng thái chờ cooldown
+
+                if triggerMiniButtonByName then
+                    triggerMiniButtonByName("Base")
+                end
+
+                -- Bước 3: Sau 10 giây trở lại bước 1
+                task.spawn(function()
+                    task.wait(10)
+                    autoZoneState = 0
+                end)
+            end
+        end
+    end
+end)
 
 -- GOD MODE LOGIC
 local function toggleGodMode(state)
@@ -116,11 +166,11 @@ workspace.DescendantAdded:Connect(function(descendant)
     end
 end)
 
--- AUTO PICK & AUTO STEAL LOOP
+-- AUTO STEAL LOOP
 task.spawn(function()
     while true do
         task.wait(0.1)
-        if not autoEggActive and not autoSteal then continue end
+        if not autoSteal then continue end
 
         pcall(function()
             local char = LocalPlayer.Character
@@ -128,38 +178,15 @@ task.spawn(function()
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
-            if autoEggActive then
-                local closestPrompt = nil
-                local minDist = 25
-                for prompt, _ in pairs(shownPrompts) do
-                    if prompt and prompt.Enabled and prompt.Parent then
-                        local pos = getPromptPosition(prompt)
-                        if pos then
-                            local dist = (hrp.Position - pos).Magnitude
-                            if dist <= minDist then
-                                minDist = dist
-                                closestPrompt = prompt
-                            end
-                        end
-                    end
-                end
-                if closestPrompt then
-                    triggerPrompt(closestPrompt)
-                    teleguiadoActive = true
-                end
-            end
-
-            if autoSteal then
-                for prompt, _ in pairs(shownPrompts) do
-                    if prompt and prompt.Enabled and prompt.Parent then
-                        local pos = getPromptPosition(prompt)
-                        if pos then
-                            if (hrp.Position - pos).Magnitude <= 25 then
-                                triggerPrompt(prompt)
-                            end
-                        else
+            for prompt, _ in pairs(shownPrompts) do
+                if prompt and prompt.Enabled and prompt.Parent then
+                    local pos = getPromptPosition(prompt)
+                    if pos then
+                        if (hrp.Position - pos).Magnitude <= 25 then
                             triggerPrompt(prompt)
                         end
+                    else
+                        triggerPrompt(prompt)
                     end
                 end
             end
@@ -181,28 +208,6 @@ local function setupCharacter(char)
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
                 local hrp = char:FindFirstChild("HumanoidRootPart")
                 if hrp then hrp.AssemblyLinearVelocity = Vector3.zero end
-            end
-            
-            if newState == Enum.HumanoidStateType.Physics or newState == Enum.HumanoidStateType.Ragdoll or newState == Enum.HumanoidStateType.PlatformStanding then
-                if teleguiadoActive then
-                    teleguiadoActive = false
-                    updateStatus("Ngắt do Stun!")
-                end
-            end
-        end)
-    end
-    
-    local hrp = char:WaitForChild("HumanoidRootPart", 5)
-    if hrp then
-        task.spawn(function()
-            while char and char.Parent do
-                task.wait(0.1)
-                if teleguiadoActive and hrp then
-                    if hrp.AssemblyLinearVelocity.Magnitude > 350 then
-                        teleguiadoActive = false
-                        updateStatus("Ngắt do Văng!")
-                    end
-                end
             end
         end)
     end
@@ -303,138 +308,156 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- MINI LIQUID GLASS CONTAINER (GÓC TRÁI MÀN HÌNH - BAY VỀ BASE)
+-- HỆ THỐNG NÚT MINI HÌNH TRÒN (VIỀN TRẮNG OFF / XANH LÁ ON)
 -- =================================================================
-local MiniGlassGui = nil
-local MiniGlassContainer = nil
+local MiniGui = Instance.new("ScreenGui")
+MiniGui.Name = "iOS26_MiniArenaGui"
+if gethui then
+    MiniGui.Parent = gethui()
+else
+    MiniGui.Parent = CoreGui
+end
 
-local function teleportLoop()
+local miniButtonsData = {
+    { id = "Base",     icon = "🏠",   screenX = 470, screenY = 11,  xyz = CFrame.new(519.01, 70.27, -362.74) },
+    { id = "AngelDev", icon = "👼😈", screenX = 470, screenY = -53, xyz = CFrame.new(5662, 70, -344) },
+    { id = "Volcano",  icon = "🌋",   screenX = 534, screenY = -52, xyz = CFrame.new(1878, 70, -395) },
+    { id = "Ocean",    icon = "🌊",   screenX = 601, screenY = -53, xyz = CFrame.new(2281, 70, -329) },
+    { id = "Dino",     icon = "🦖",   screenX = 671, screenY = -52, xyz = CFrame.new(2815, 70, -396) },
+    { id = "Galaxy",   icon = "🌌",   screenX = 538, screenY = 9,   xyz = CFrame.new(3393, 70, -327) },
+    { id = "Flower",   icon = "🌸",   screenX = 666, screenY = 11,  xyz = CFrame.new(4030, 70, -398) },
+    { id = "Lizard",   icon = "🦎",   screenX = 601, screenY = 10,  xyz = CFrame.new(4797, 70, -330) },
+}
+
+local activeTeleportToken = 0
+local buttonStates = {}
+local miniStrokes = {}
+local miniButtonObjects = {}
+
+local function stopTeleport()
+    activeTeleportToken = activeTeleportToken + 1
+end
+
+local function startChunkTeleport(targetCF, sourceBtn)
+    activeTeleportToken = activeTeleportToken + 1
+    local currentToken = activeTeleportToken
+
     task.spawn(function()
-        while flyToBaseActive do
+        while activeTeleportToken == currentToken and targetCF do
             pcall(function()
                 local char = LocalPlayer.Character
                 if char then
                     local hrp = char:FindFirstChild("HumanoidRootPart")
                     if hrp then
-                        hrp.CFrame = baseCFrame
+                        local currentPos = hrp.Position
+                        local targetPos = targetCF.Position
+                        local direction = (targetPos - currentPos)
+                        local distance = direction.Magnitude
+                        local stepDistance = chunkVal or 12
+
+                        if distance > stepDistance then
+                            local moveVector = direction.Unit * stepDistance
+                            hrp.CFrame = CFrame.new(currentPos + moveVector)
+                        else
+                            hrp.CFrame = targetCF
+                            activeTeleportToken = 0
+                            
+                            -- Đã tới đích -> Đổi viền về TRẮNG (OFF)
+                            if sourceBtn and miniStrokes[sourceBtn] then
+                                buttonStates[sourceBtn] = false
+                                TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
+                                    Color = Color3.fromRGB(255, 255, 255)
+                                }):Play()
+                            end
+                        end
                     end
                 end
             end)
-            task.wait(0.05)
+            local speed = speedVal or 600
+            local delayTime = math.clamp(1 / (speed / 15), 0.001, 0.1)
+            task.wait(delayTime)
         end
     end)
 end
 
-local function createMiniGlassButton()
-    if MiniGlassGui then pcall(function() MiniGlassGui:Destroy() end) end
+-- Hàm kích hoạt nút từ xa dành cho Auto Zone
+triggerMiniButtonByName = function(idName)
+    local obj = miniButtonObjects[idName]
+    if not obj then return end
 
-    MiniGlassGui = Instance.new("ScreenGui")
-    MiniGlassGui.Name = "iOS26_MiniGlassContainerGui"
-    if gethui then
-        MiniGlassGui.Parent = gethui()
-    else
-        MiniGlassGui.Parent = CoreGui
-    end
-
-    -- Khung Container đặt ở góc TRÁI màn hình (0.02, 0, 0.2, 0)
-    MiniGlassContainer = Instance.new("Frame")
-    MiniGlassContainer.Name = "MiniContainer"
-    MiniGlassContainer.Size = UDim2.new(0, 80, 0, 66)
-    MiniGlassContainer.Position = UDim2.new(0.02, 0, 0.2, 0)
-    MiniGlassContainer.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    MiniGlassContainer.BackgroundTransparency = 0.78
-    MiniGlassContainer.Parent = MiniGlassGui
-
-    local ContCorner = Instance.new("UICorner")
-    ContCorner.CornerRadius = UDim.new(0, 16)
-    ContCorner.Parent = MiniGlassContainer
-
-    local ContStroke = Instance.new("UIStroke")
-    ContStroke.Thickness = 1.2
-    ContStroke.Color = Color3.fromRGB(255, 255, 255)
-    ContStroke.Transparency = 0.3
-    ContStroke.Parent = MiniGlassContainer
-
-    local ContGradient = Instance.new("UIGradient")
-    ContGradient.Rotation = 45
-    ContGradient.Color = ColorSequence.new({
-        ColorSequenceKeypoint.new(0, Color3.fromRGB(255, 255, 255)),
-        ColorSequenceKeypoint.new(0.5, Color3.fromRGB(240, 245, 255)),
-        ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
-    })
-    ContGradient.Transparency = NumberSequence.new({
-        NumberSequenceKeypoint.new(0, 0.4),
-        NumberSequenceKeypoint.new(0.5, 0.75),
-        NumberSequenceKeypoint.new(1, 0.8)
-    })
-    ContGradient.Parent = MiniGlassContainer
-
-    -- Nút Toggle bật/tắt bay về Base
-    local MiniToggleButton = Instance.new("TextButton")
-    MiniToggleButton.Name = "ToggleBtn"
-    MiniToggleButton.Size = UDim2.new(0, 68, 0, 52)
-    MiniToggleButton.Position = UDim2.new(0, 6, 0.5, -26)
-    MiniToggleButton.BackgroundColor3 = flyToBaseActive and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255)
-    MiniToggleButton.BackgroundTransparency = flyToBaseActive and 0.25 or 0.65
-    MiniToggleButton.Text = flyToBaseActive and "BASE: ON" or "BASE: OFF"
-    MiniToggleButton.TextColor3 = flyToBaseActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
-    MiniToggleButton.Font = Enum.Font.GothamBold
-    MiniToggleButton.TextSize = 10
-    MiniToggleButton.AutoButtonColor = false
-    MiniToggleButton.Parent = MiniGlassContainer
-
-    local ToggleCorner = Instance.new("UICorner")
-    ToggleCorner.CornerRadius = UDim.new(0, 12)
-    ToggleCorner.Parent = MiniToggleButton
-
-    MiniToggleButton.MouseButton1Click:Connect(function()
-        flyToBaseActive = not flyToBaseActive
-        TweenService:Create(MiniToggleButton, TweenInfo.new(0.15), {
-            BackgroundColor3 = flyToBaseActive and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(255, 255, 255),
-            BackgroundTransparency = flyToBaseActive and 0.25 or 0.65
+    -- Tắt hiệu ứng của các nút khác
+    for otherBtn, otherStroke in pairs(miniStrokes) do
+        buttonStates[otherBtn] = false
+        TweenService:Create(otherStroke, TweenInfo.new(0.2), {
+            Color = Color3.fromRGB(255, 255, 255)
         }):Play()
-        MiniToggleButton.Text = flyToBaseActive and "BASE: ON" or "BASE: OFF"
-        MiniToggleButton.TextColor3 = flyToBaseActive and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(15, 15, 20)
-        
-        if flyToBaseActive then
-            teleportLoop()
-        end
-    end)
+    end
 
-    -- Kéo thả Container
-    local dragging, dragInput, dragStart, startPos
-    MiniGlassContainer.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            dragging = true
-            dragStart = input.Position
-            startPos = MiniGlassContainer.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then
-                    dragging = false
-                end
-            end)
-        end
-    end)
-    MiniGlassContainer.InputChanged:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-            dragInput = input
-        end
-    end)
-    UserInputService.InputChanged:Connect(function(input)
-        if input == dragInput and dragging then
-            local delta = input.Position - dragStart
-            MiniGlassContainer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-        end
-    end)
+    buttonStates[obj.btn] = true
+    -- Bật viền XANH LÁ
+    TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
+        Color = Color3.fromRGB(48, 209, 88)
+    }):Play()
+
+    startChunkTeleport(obj.data.xyz, obj.btn)
 end
 
-local function removeMiniGlassButton()
-    flyToBaseActive = false
-    if MiniGlassGui then
-        pcall(function() MiniGlassGui:Destroy() end)
-        MiniGlassGui = nil
-        MiniGlassContainer = nil
-    end
+-- Tạo giao diện các nút tròn Mini
+for _, data in ipairs(miniButtonsData) do
+    local btn = Instance.new("TextButton")
+    btn.Name = "MiniBtn_" .. data.id
+    btn.Size = UDim2.new(0, 38, 0, 38)
+    btn.AnchorPoint = Vector2.new(0.5, 0.5)
+    btn.Position = UDim2.new(0.5, data.screenX, 0.5, data.screenY)
+    btn.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+    btn.BackgroundTransparency = 0.35
+    btn.Text = data.icon
+    btn.TextSize = 14
+    btn.AutoButtonColor = false
+    btn.Parent = MiniGui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(1, 0)
+    corner.Parent = btn
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Thickness = 2.5
+    stroke.Color = Color3.fromRGB(255, 255, 255) -- TRẮNG khi OFF
+    stroke.Transparency = 0.1
+    stroke.Parent = btn
+
+    miniStrokes[btn] = stroke
+    buttonStates[btn] = false
+    miniButtonObjects[data.id] = { btn = btn, stroke = stroke, data = data }
+
+    btn.MouseButton1Click:Connect(function()
+        local isON = not buttonStates[btn]
+
+        for otherBtn, otherStroke in pairs(miniStrokes) do
+            buttonStates[otherBtn] = false
+            TweenService:Create(otherStroke, TweenInfo.new(0.2), {
+                Color = Color3.fromRGB(255, 255, 255)
+            }):Play()
+        end
+
+        buttonStates[btn] = isON
+
+        if isON then
+            -- Chuyển viền sang XANH LÁ khi BẬT
+            TweenService:Create(stroke, TweenInfo.new(0.2), {
+                Color = Color3.fromRGB(48, 209, 88)
+            }):Play()
+            
+            startChunkTeleport(data.xyz, btn)
+        else
+            -- Chuyển viền về TRẮNG khi TẮT
+            TweenService:Create(stroke, TweenInfo.new(0.2), {
+                Color = Color3.fromRGB(255, 255, 255)
+            }):Play()
+            
+            stopTeleport()
+        end
+    end)
 end
 
 -- =================================================================
@@ -737,28 +760,6 @@ function iOS26Glass:CreateWindow(titleText)
         isAnimating = false
     end
 
-    local function closeMenu()
-        if isAnimating then return end
-        isAnimating = true
-
-        Sidebar.Visible = false
-        ContentContainer.Visible = false
-        TopBar.Visible = false
-        IslandLabel.Visible = false
-
-        local closeTween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, 8, 0, 8),
-            Position = UDim2.new(0.5, -4, 0, 15),
-            BackgroundTransparency = 1
-        })
-        TweenService:Create(MainStroke, TweenInfo.new(0.25), { Transparency = 1 }):Play()
-        closeTween:Play()
-
-        closeTween.Completed:Wait()
-        ScreenGui.Enabled = false
-        isAnimating = false
-    end
-
     MinimizeBtn.MouseButton1Click:Connect(minimizeMenu)
 
     MainFrame.InputBegan:Connect(function(input)
@@ -767,7 +768,7 @@ function iOS26Glass:CreateWindow(titleText)
         end
     end)
 
-    local Window = { ActiveTab = nil, Close = closeMenu }
+    local Window = { ActiveTab = nil }
 
     function Window:AddTab(tabName)
         local TabButton = Instance.new("TextButton")
@@ -1065,31 +1066,34 @@ function iOS26Glass:CreateWindow(titleText)
 end
 
 -- =================================================================
--- THIẾT LẬP MENU & CÁC NÚT TÍNH NĂNG
+-- THIẾT LẬP MENU MAIN & TABS
 -- =================================================================
 local Library = iOS26Glass:CreateWindow("Dragon Nova Hub")
 
-local MainTab = Library:AddTab("Main")
+local MainTab   = Library:AddTab("Main")
+local ArenaTab  = Library:AddTab("Arena")
 local BypassTab = Library:AddTab("Bypass")
-local MiscTab = Library:AddTab("Misc")
+local MiscTab   = Library:AddTab("Misc")
 
 -- TAB MAIN
-MainTab:AddToggle("Teleguiado Mini Button", false, function(val)
-    teleguiadoToggleActive = val
-    if val then
-        createMiniGlassButton()
-    else
-        removeMiniGlassButton()
-    end
-end)
-
 MainTab:AddToggle("Auto Steal", autoSteal, function(val)
     autoSteal = val
 end)
 
-MainTab:AddToggle("Auto Pick", autoEggActive, function(val)
-    autoEggActive = val
+-- Đã đổi tên Auto Pick -> Auto Zone
+MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
+    autoZoneActive = val
+    if not val then
+        autoZoneState = 0
+    end
 end)
+
+-- TAB ARENA
+for _, data in ipairs(miniButtonsData) do
+    ArenaTab:AddButton(data.icon .. " Teleport " .. data.id, function()
+        triggerMiniButtonByName(data.id)
+    end)
+end
 
 -- TAB BYPASS
 BypassTab:AddToggle("God Mode", false, function(val)
