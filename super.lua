@@ -19,6 +19,7 @@ local autoZoneActive = false
 local hitboxActive = true
 local antiTrapActive = true
 local godModeActive = false
+local autoBatActive = false -- Thêm biến Auto Bat
 
 local speedVal = 600
 local chunkVal = 12
@@ -575,6 +576,36 @@ task.spawn(function()
                             hrp.BrickColor = BrickColor.new("Really red")
                             hrp.Material = Enum.Material.Neon
                             hrp.CanCollide = false
+                        end
+                    end
+                end
+            end)
+        end
+    end
+end)
+
+-- =================================================================
+-- AUTO BAT LOGIC (Tự động cầm HitAnim và kích hoạt)
+-- =================================================================
+task.spawn(function()
+    while true do
+        task.wait(0.3)
+        if autoBatActive then
+            pcall(function()
+                local char = LocalPlayer.Character
+                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+                local backpack = LocalPlayer:FindFirstChild("Backpack")
+
+                if humanoid and humanoid.Health > 0 and backpack then
+                    for _, tool in ipairs(backpack:GetChildren()) do
+                        if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
+                            local equippedTool = char:FindFirstChild(tool.Name)
+                            if not equippedTool then
+                                humanoid:EquipTool(tool)
+                            else
+                                equippedTool:Activate()
+                            end
+                            break
                         end
                     end
                 end
@@ -1413,6 +1444,10 @@ end
 -- =================================================================
 -- TAB BYPASS
 -- =================================================================
+BypassTab:AddToggle("Auto bat", false, function(val)
+    autoBatActive = val
+end)
+
 BypassTab:AddToggle("God Mode", false, function(val)
     godModeActive = val
     toggleGodMode(val)
