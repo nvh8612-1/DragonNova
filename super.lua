@@ -1,4 +1,5 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub - Layout 2x4 Mini Arena)
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub - Full Tween & Teleport Engine)
+
 local iOS26Glass = {}
 
 local CoreGui = game:GetService("CoreGui")
@@ -19,11 +20,34 @@ local autoZoneActive = false
 local hitboxActive = true
 local antiTrapActive = true
 local godModeActive = false
-local autoBatActive = false -- Thêm biến Auto Bat
+local autoBatActive = false
+local drScrambleActive = false
 
+-- LOGIC TPWALK
+local tpWalkActive = false
+local tpWalkSpeed = 16
+
+-- CẤU HÌNH DI CHUYỂN
+local moveMode = "Teleport"
 local speedVal = 600
 local chunkVal = 12
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
+
+-- LOOP TPWALK ENGINE
+RunService.Heartbeat:Connect(function(deltaTime)
+    if tpWalkActive then
+        pcall(function()
+            local char = LocalPlayer.Character
+            if char then
+                local hum = char:FindFirstChildOfClass("Humanoid")
+                local hrp = char:FindFirstChild("HumanoidRootPart")
+                if hum and hrp and hum.MoveDirection.Magnitude > 0 then
+                    hrp.CFrame = hrp.CFrame + (hum.MoveDirection * (tpWalkSpeed / 10) * deltaTime * 60)
+                end
+            end
+        end)
+    end
+end)
 
 -- =================================================================
 -- HỆ THỐNG NÚT MINI ARENA (CẤU TRÚC 2 HÀNG X 4 CỘT)
@@ -45,13 +69,10 @@ ArenaContainer.BackgroundTransparency = 1
 ArenaContainer.Parent = MiniGui
 
 local miniButtonsData = {
-    -- HÀNG TRÊN (Row = 0)
     { id = "Base",     icon = "🏠",   col = 0, row = 0, xyz = baseCFrame or CFrame.new(519.01, 70.27, -362.74) },
     { id = "Volcano",  icon = "🌋",   col = 1, row = 0, xyz = CFrame.new(1878, 70, -395) },
     { id = "Ocean",    icon = "🌊",   col = 2, row = 0, xyz = CFrame.new(2281, 70, -329) },
     { id = "Dino",     icon = "🦖",   col = 3, row = 0, xyz = CFrame.new(2815, 70, -396) },
-
-    -- HÀNG DƯỚI (Row = 1)
     { id = "AngelDev", icon = "👼😈", col = 0, row = 1, xyz = CFrame.new(5662, 70, -344) },
     { id = "Galaxy",   icon = "🌌",   col = 1, row = 1, xyz = CFrame.new(3393, 70, -327) },
     { id = "Flower",   icon = "🌸",   col = 2, row = 1, xyz = CFrame.new(4030, 70, -398) },
@@ -59,54 +80,92 @@ local miniButtonsData = {
 }
 
 local activeTeleportToken = 0
+local activeTween = nil
 local buttonStates = {}
 local miniStrokes = {}
 local miniButtonObjects = {}
 
 local function stopTeleport()
     activeTeleportToken = activeTeleportToken + 1
+    if activeTween then
+        activeTween:Cancel()
+        activeTween = nil
+    end
 end
 
-local function startChunkTeleport(targetCF, sourceBtn)
-    activeTeleportToken = activeTeleportToken + 1
+local function startMovement(targetCF, sourceBtn)
+    stopTeleport()
     local currentToken = activeTeleportToken
 
-    task.spawn(function()
-        while activeTeleportToken == currentToken and targetCF do
-            pcall(function()
-                local char = LocalPlayer.Character
-                if char then
-                    local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        local currentPos = hrp.Position
-                        local targetPos = targetCF.Position
-                        local direction = (targetPos - currentPos)
-                        local distance = direction.Magnitude
-                        local stepDistance = chunkVal or 12
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp or not targetCF then return end
 
-                        if distance > stepDistance then
-                            local moveVector = direction.Unit * stepDistance
-                            hrp.CFrame = CFrame.new(currentPos + moveVector)
-                        else
-                            hrp.CFrame = targetCF
-                            activeTeleportToken = 0
-                            
-                            if sourceBtn and miniStrokes[sourceBtn] then
-                                buttonStates[sourceBtn] = false
-                                TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
-                                    Color = Color3.fromRGB(255, 255, 255)
-                                }):Play()
+    local currentPos = hrp.Position
+    local targetPos = targetCF.Position
+    local distance = (targetPos - currentPos).Magnitude
+
+    if moveMode == "Teleport" then
+        task.spawn(function()
+            while activeTeleportToken == currentToken and targetCF do
+                pcall(function()
+                    local cChar = LocalPlayer.Character
+                    if cChar then
+                        local cHrp = cChar:FindFirstChild("HumanoidRootPart")
+                        if cHrp then
+                            local cPos = cHrp.Position
+                            local tPos = targetCF.Position
+                            local dir = (tPos - cPos)
+                            local dist = dir.Magnitude
+                            local stepDist = chunkVal or 12
+
+                            if dist > stepDist then
+                                cHrp.CFrame = CFrame.new(cPos + (dir.Unit * stepDist))
+                            else
+                                cHrp.CFrame = targetCF
+                                activeTeleportToken = 0
+
+                                if sourceBtn and miniStrokes[sourceBtn] then
+                                    buttonStates[sourceBtn] = false
+                                    TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
+                                        Color = Color3.fromRGB(255, 255, 255)
+                                    }):Play()
+                                end
                             end
                         end
                     end
-                end
-            end)
+                end)
 
-            local speed = speedVal or 600
-            local delayTime = math.clamp(1 / (speed / 15), 0.001, 0.1)
-            task.wait(delayTime)
-        end
-    end)
+                local speed = speedVal or 600
+                local delayTime = math.clamp(1 / (speed / 15), 0.001, 0.1)
+                task.wait(delayTime)
+            end
+        end)
+
+    elseif moveMode == "Tween" then
+        local flySpeed = math.max(speedVal, 10)
+        local timeToReach = distance / flySpeed
+
+        local tweenInfo = TweenInfo.new(
+            timeToReach,
+            Enum.EasingStyle.Linear,
+            Enum.EasingDirection.Out
+        )
+
+        activeTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCF})
+        activeTween:Play()
+
+        activeTween.Completed:Connect(function()
+            if sourceBtn and miniStrokes[sourceBtn] then
+                buttonStates[sourceBtn] = false
+                TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
+                    Color = Color3.fromRGB(255, 255, 255)
+                }):Play()
+            end
+            activeTween = nil
+        end)
+    end
 end
 
 local function triggerMiniButtonByName(idName)
@@ -126,12 +185,12 @@ local function triggerMiniButtonByName(idName)
         Color = Color3.fromRGB(48, 209, 88)
     }):Play()
 
-    startChunkTeleport(obj.data.xyz, obj.btn)
+    startMovement(obj.data.xyz, obj.btn)
 end
 
 for _, data in ipairs(miniButtonsData) do
     local btn = Instance.new("TextButton")
-    btn.Name = "MiniBtn_" .. data.id
+    btn.Name = "MiniBtn" .. data.id
     btn.Size = UDim2.new(0, 38, 0, 38)
     btn.Position = UDim2.new(0, data.col * 44, 0, data.row * 44)
     btn.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
@@ -166,7 +225,6 @@ for _, data in ipairs(miniButtonsData) do
 
         for otherBtn, otherStroke in pairs(miniStrokes) do
             buttonStates[otherBtn] = false
-
             TweenService:Create(otherStroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(255, 255, 255)
             }):Play()
@@ -178,15 +236,131 @@ for _, data in ipairs(miniButtonsData) do
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(48, 209, 88)
             }):Play()
-
-            startChunkTeleport(data.xyz, btn)
+            startMovement(data.xyz, btn)
         else
             TweenService:Create(stroke, TweenInfo.new(0.2), {
                 Color = Color3.fromRGB(255, 255, 255)
             }):Play()
-
             stopTeleport()
         end
+    end)
+end
+
+-- =================================================================
+-- LOGIC DR SCRAMBLE'S EXPERIMENTS TELEPORT (GHIM 1 MỤC TIÊU)
+-- =================================================================
+local SCRAMBLE_SPEED = 400
+local drToken = 0
+local drTween = nil
+local lockedTarget = nil
+
+local function getObjectCFrame(targetObj)
+    if not targetObj then return nil end
+    if targetObj:IsA("Model") then
+        return targetObj:GetPivot()
+    elseif targetObj:IsA("BasePart") then
+        return targetObj.CFrame
+    end
+    return nil
+end
+
+local function isScrambleTargetValid(obj)
+    if not obj then return false end
+    if not obj.Parent then return false end
+    if not obj:IsDescendantOf(workspace) then return false end
+    return true
+end
+
+local function findScrambleTarget()
+    local folder = workspace:FindFirstChild("ScrambleLocalVisuals")
+    if not folder then return nil end
+
+    local prefixes = { "PersonalDrone_", "DroneVisual_" }
+    for _, prefix in ipairs(prefixes) do
+        for _, child in ipairs(folder:GetChildren()) do
+            if child.Name ~= "DrScrambleVFX" and child ~= lockedTarget then
+                if child.Name:sub(1, #prefix) == prefix then
+                    return child
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function stopDrScramble()
+    drToken = drToken + 1
+    if drTween then
+        pcall(function() drTween:Cancel() end)
+        drTween = nil
+    end
+end
+
+local function doDrScrambleTeleport()
+    if not isScrambleTargetValid(lockedTarget) then
+        lockedTarget = findScrambleTarget()
+        if not lockedTarget then return end
+    end
+
+    local targetCF = getObjectCFrame(lockedTarget)
+    if not targetCF then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    local dist = (hrp.Position - targetCF.Position).Magnitude
+    if dist < 3 then return end
+
+    drToken = drToken + 1
+    local myToken = drToken
+
+    local timeToReach = dist / math.max(SCRAMBLE_SPEED, 10)
+
+    drTween = TweenService:Create(
+        hrp,
+        TweenInfo.new(timeToReach, Enum.EasingStyle.Linear, Enum.EasingDirection.Out),
+        {CFrame = targetCF}
+    )
+    drTween:Play()
+
+    drTween.Completed:Connect(function()
+        if drToken == myToken then
+            drTween = nil
+        end
+    end)
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.2)
+
+        if not drScrambleActive then
+            stopDrScramble()
+            lockedTarget = nil
+            task.wait(0.2)
+            continue
+        end
+
+        pcall(function()
+            if lockedTarget and not isScrambleTargetValid(lockedTarget) then
+                stopDrScramble()
+                lockedTarget = nil
+            end
+
+            if drTween and drTween.PlaybackState == Enum.PlaybackState.Playing then
+                return
+            end
+
+            doDrScrambleTeleport()
+        end)
+    end
+end)
+
+getgenv().DrScrambleKick = function()
+    task.spawn(function()
+        pcall(doDrScrambleTeleport)
     end)
 end
 
@@ -204,13 +378,13 @@ local function monitorCharacterStun(char)
 
     hum.StateChanged:Connect(function(_, newState)
         if newState == Enum.HumanoidStateType.Physics
-        or newState == Enum.HumanoidStateType.Ragdoll
-        or newState == Enum.HumanoidStateType.FallingDown
-        or newState == Enum.HumanoidStateType.PlatformStanding then
+            or newState == Enum.HumanoidStateType.Ragdoll
+            or newState == Enum.HumanoidStateType.FallingDown
+            or newState == Enum.HumanoidStateType.PlatformStanding then
 
             if autoZoneActive
-            and autoZoneState == 0
-            and (os.clock() - lastPromptTime <= 3.5) then
+                and autoZoneState == 0
+                and (os.clock() - lastPromptTime <= 3.5) then
                 autoZoneState = 1
             end
         end
@@ -218,9 +392,9 @@ local function monitorCharacterStun(char)
 
     hum:GetPropertyChangedSignal("Sit"):Connect(function()
         if hum.Sit
-        and autoZoneActive
-        and autoZoneState == 0
-        and (os.clock() - lastPromptTime <= 3.5) then
+            and autoZoneActive
+            and autoZoneState == 0
+            and (os.clock() - lastPromptTime <= 3.5) then
             autoZoneState = 1
         end
     end)
@@ -239,7 +413,6 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
         if autoZoneActive then
             if autoZoneState == 1 then
                 autoZoneState = 2
-
                 triggerMiniButtonByName("Base")
 
                 task.spawn(function()
@@ -252,38 +425,39 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
 end)
 
 -- =================================================================
--- GOD MODE LOGIC CHUẨN (CLONE HUMANOID)
+-- GOD MODE LOGIC (CLONE HUMANOID)
 -- =================================================================
+local godModeEnabled = false
+
 local function toggleGodMode(state)
     local character = LocalPlayer.Character
     if not character then return end
-    
+
     if state then
         for _, tool in ipairs(character:GetChildren()) do
             if tool:IsA("Tool") then
                 tool.Parent = LocalPlayer.Backpack
             end
         end
-        
+
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         local rootPart = character:FindFirstChild("HumanoidRootPart")
 
         if not humanoid or not rootPart then
             return
         end
-        
+
         local currentCFrame = rootPart.CFrame
-        
         local newHumanoid = humanoid:Clone()
         newHumanoid.Parent = character
 
         humanoid:Destroy()
-        
+
         LocalPlayer.Character = nil
         LocalPlayer.Character = character
 
         workspace.CurrentCamera.CameraSubject = newHumanoid
-        
+
         task.defer(function()
             if rootPart then
                 rootPart.CFrame = currentCFrame
@@ -376,8 +550,8 @@ task.spawn(function()
 
             for prompt, _ in pairs(shownPrompts) do
                 if prompt
-                and prompt:IsDescendantOf(workspace)
-                and prompt.Enabled then
+                    and prompt:IsDescendantOf(workspace)
+                    and prompt.Enabled then
 
                     local pos = getPromptPosition(prompt)
 
@@ -397,10 +571,79 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- ANTI STUN & KNOCKBACK
+-- ANTI STUN & KNOCKBACK (KNOCKBACK CHỈ KÍCH KHI ANTI STUN)
 -- =================================================================
+local knockbackRunning = false
+local knockbackConn    = nil
+local lastStableCFrame = nil
+
+local function isBadState(state)
+    return state == Enum.HumanoidStateType.Physics
+        or state == Enum.HumanoidStateType.Ragdoll
+        or state == Enum.HumanoidStateType.FallingDown
+        or state == Enum.HumanoidStateType.PlatformStanding
+end
+
+local function startAntiKnockback(char, hum, hrp)
+    if knockbackRunning then return end
+    knockbackRunning = true
+    lastStableCFrame = hrp.CFrame
+
+    knockbackConn = RunService.Heartbeat:Connect(function()
+        if not char or not char.Parent then
+            if knockbackConn then
+                knockbackConn:Disconnect()
+                knockbackConn = nil
+            end
+            knockbackRunning = false
+            return
+        end
+
+        local cHrp = char:FindFirstChild("HumanoidRootPart")
+        local cHum = char:FindFirstChildOfClass("Humanoid")
+        if not cHrp or not cHum then return end
+
+        cHrp.AssemblyLinearVelocity  = Vector3.zero
+        cHrp.AssemblyAngularVelocity = Vector3.zero
+        cHrp.Velocity    = Vector3.zero
+        cHrp.RotVelocity = Vector3.zero
+
+        if lastStableCFrame then
+            local dist = (cHrp.Position - lastStableCFrame.Position).Magnitude
+            if dist > 5 then
+                local pos = lastStableCFrame.Position
+                cHrp.CFrame = CFrame.new(pos, pos + lastStableCFrame.LookVector)
+            end
+        end
+
+        pcall(function()
+            cHum:ChangeState(Enum.HumanoidStateType.Running)
+            cHum.PlatformStand = false
+            cHum.Sit = false
+            cHum.AutoRotate = true
+        end)
+
+        for _, motor in ipairs(char:GetDescendants()) do
+            if motor:IsA("Motor6D") and not motor.Enabled then
+                motor.Enabled = true
+            end
+        end
+    end)
+end
+
+local function stopAntiKnockback()
+    if knockbackConn then
+        knockbackConn:Disconnect()
+        knockbackConn = nil
+    end
+    knockbackRunning = false
+end
+
 local function setupCharacter(char)
     if not char then return end
+
+    stopAntiKnockback()
+    lastStableCFrame = nil
 
     local hum = char:WaitForChild("Humanoid", 5)
 
@@ -410,18 +653,28 @@ local function setupCharacter(char)
         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
 
         hum.StateChanged:Connect(function(_, newState)
-            if antiStun
-            and (
-                newState == Enum.HumanoidStateType.Physics
-                or newState == Enum.HumanoidStateType.Ragdoll
-                or newState == Enum.HumanoidStateType.FallingDown
-            ) then
+            if not antiStun then return end
 
+            if isBadState(newState) then
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
 
                 local hrp = char:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     hrp.AssemblyLinearVelocity = Vector3.zero
+                    startAntiKnockback(char, hum, hrp)
+                end
+            else
+                if newState == Enum.HumanoidStateType.Running
+                    or newState == Enum.HumanoidStateType.RunningNoPhysics
+                    or newState == Enum.HumanoidStateType.Landed
+                    or newState == Enum.HumanoidStateType.GettingUp then
+
+                    stopAntiKnockback()
+
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    if hrp then
+                        lastStableCFrame = hrp.CFrame
+                    end
                 end
             end
         end)
@@ -475,9 +728,9 @@ local trapESP = {}
 
 local function createTrapESP(part)
     if not antiTrapActive
-    or not part
-    or not part:IsA("BasePart")
-    or trapESP[part] then
+        or not part
+        or not part:IsA("BasePart")
+        or trapESP[part] then
         return
     end
 
@@ -522,7 +775,7 @@ local function disableTrapPart(part)
 
         for _, child in ipairs(part:GetDescendants()) do
             if child:IsA("TouchTransmitter")
-            or child.ClassName == "TouchInterest" then
+                or child.ClassName == "TouchInterest" then
                 child:Destroy()
             end
         end
@@ -585,32 +838,133 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- AUTO BAT LOGIC (Tự động cầm HitAnim và kích hoạt)
+-- AUTO BAT LOGIC (THE SCRAMBLER [X1] + HITANIM)
 -- =================================================================
-task.spawn(function()
-    while true do
-        task.wait(0.3)
-        if autoBatActive then
-            pcall(function()
-                local char = LocalPlayer.Character
-                local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-                local backpack = LocalPlayer:FindFirstChild("Backpack")
+local function fireAutoBatM1(tool)
+    if not tool or not tool.Parent then return end
 
-                if humanoid and humanoid.Health > 0 and backpack then
-                    for _, tool in ipairs(backpack:GetChildren()) do
-                        if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
-                            local equippedTool = char:FindFirstChild(tool.Name)
-                            if not equippedTool then
-                                humanoid:EquipTool(tool)
-                            else
-                                equippedTool:Activate()
-                            end
-                            break
-                        end
-                    end
+    pcall(function() tool:Activate() end)
+
+    if getconnections then
+        for _, sig in ipairs({
+            tool.Activated,
+            tool.MouseButton1Click,
+            tool.MouseButton1Down,
+        }) do
+            pcall(function()
+                for _, conn in ipairs(getconnections(sig)) do
+                    if conn.Fire then conn:Fire() end
                 end
             end)
         end
+    end
+
+    for _, desc in ipairs(tool:GetDescendants()) do
+        pcall(function()
+            if desc:IsA("RemoteEvent") then
+                desc:FireServer()
+            elseif desc:IsA("RemoteFunction") then
+                desc:InvokeServer()
+            elseif desc:IsA("BindableEvent") then
+                desc:Fire()
+            elseif desc:IsA("ClickDetector") and getconnections then
+                for _, conn in ipairs(getconnections(desc.MouseClick)) do
+                    if conn.Fire then conn:Fire() end
+                end
+            end
+        end)
+    end
+
+    local handle = tool:FindFirstChild("Handle")
+    if handle and getconnections then
+        pcall(function()
+            for _, conn in ipairs(getconnections(handle.MouseButton1Click)) do
+                if conn.Fire then conn:Fire() end
+            end
+        end)
+    end
+end
+
+local function findAutoBatTool()
+    local char = LocalPlayer.Character
+    if not char then return nil, false end
+
+    local backpack = LocalPlayer:FindFirstChild("Backpack")
+    local scramblerName = "The Scrambler [X1]"
+
+    -- ƯU TIÊN 1: The Scrambler [X1] đang cầm
+    local equippedScrambler = char:FindFirstChild(scramblerName)
+    if equippedScrambler and equippedScrambler:IsA("Tool") then
+        return equippedScrambler, true
+    end
+
+    -- ƯU TIÊN 2: The Scrambler [X1] trong Backpack
+    if backpack then
+        local scramblerInBag = backpack:FindFirstChild(scramblerName)
+        if scramblerInBag and scramblerInBag:IsA("Tool") then
+            return scramblerInBag, false
+        end
+    end
+
+    -- ƯU TIÊN 3: Fallback tool có HitAnim đang cầm
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
+            return tool, true
+        end
+    end
+
+    -- ƯU TIÊN 4: Fallback tool có HitAnim trong Backpack
+    if backpack then
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
+                return tool, false
+            end
+        end
+    end
+
+    return nil, false
+end
+
+task.spawn(function()
+    while true do
+        task.wait(0.1)
+
+        if not autoBatActive then
+            continue
+        end
+
+        local tool, equipped = findAutoBatTool()
+
+        if not tool then
+            task.wait(0.4)
+            continue
+        end
+
+        -- Chưa cầm → equip + chờ 0.8s
+        if not equipped then
+            local char = LocalPlayer.Character
+            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+            if humanoid and humanoid.Health > 0 then
+                pcall(function()
+                    humanoid:EquipTool(tool)
+                end)
+            end
+            task.wait(0.8)
+        end
+
+        -- Đã cầm → spam M1 liên tục
+        while autoBatActive do
+            if not tool or not tool.Parent then break end
+            if tool.Parent ~= LocalPlayer.Character then break end
+
+            pcall(function()
+                fireAutoBatM1(tool)
+            end)
+
+            RunService.Heartbeat:Wait()
+        end
+
+        task.wait(0.1)
     end
 end)
 
@@ -622,7 +976,7 @@ local function enableDragging(topbar, frame)
 
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
-        or input.UserInputType == Enum.UserInputType.Touch then
+            or input.UserInputType == Enum.UserInputType.Touch then
 
             dragging = true
             dragStart = input.Position
@@ -638,7 +992,7 @@ local function enableDragging(topbar, frame)
 
     topbar.InputChanged:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseMovement
-        or input.UserInputType == Enum.UserInputType.Touch then
+            or input.UserInputType == Enum.UserInputType.Touch then
             dragInput = input
         end
     end)
@@ -718,9 +1072,7 @@ function iOS26Glass:CreateWindow(titleText)
     TopBar.Name = "TopBar"
     TopBar.Size = UDim2.new(1, 0, 0, 38)
     TopBar.BackgroundTransparency = 1
-    TopBar.Parent = MainFrame
-
-    local Title = Instance.new("TextLabel")
+    TopBar.Parent = MainFrame    local Title = Instance.new("TextLabel")
     Title.Name = "Title"
     Title.Size = UDim2.new(1, -70, 1, 0)
     Title.Position = UDim2.new(0, 16, 0, 0)
@@ -868,10 +1220,7 @@ function iOS26Glass:CreateWindow(titleText)
     ContentContainer.Parent = MainFrame
 
     local function minimizeMenu()
-        if isAnimating or isMinimized then
-            return
-        end
-
+        if isAnimating or isMinimized then return end
         isAnimating = true
 
         Sidebar.Visible = false
@@ -881,26 +1230,17 @@ function iOS26Glass:CreateWindow(titleText)
         local dotTween = TweenService:Create(
             MainFrame,
             TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-            {
-                Size = UDim2.new(0, 18, 0, 18),
-                Position = UDim2.new(0.5, -9, 0, 15)
-            }
+            { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0.5, -9, 0, 15) }
         )
 
-        TweenService:Create(MainCorner, TweenInfo.new(0.25), {
-            CornerRadius = UDim.new(1, 0)
-        }):Play()
-
+        TweenService:Create(MainCorner, TweenInfo.new(0.25), { CornerRadius = UDim.new(1, 0) }):Play()
         dotTween:Play()
         dotTween.Completed:Wait()
 
         local expandIsland = TweenService:Create(
             MainFrame,
             TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-            {
-                Size = islandSize,
-                Position = islandPosition
-            }
+            { Size = islandSize, Position = islandPosition }
         )
 
         expandIsland:Play()
@@ -912,20 +1252,14 @@ function iOS26Glass:CreateWindow(titleText)
     end
 
     local function expandMenu()
-        if isAnimating or not isMinimized then
-            return
-        end
-
+        if isAnimating or not isMinimized then return end
         isAnimating = true
         IslandLabel.Visible = false
 
         local swellTween = TweenService:Create(
             MainFrame,
             TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-            {
-                Size = UDim2.new(0, 176, 0, 44),
-                Position = UDim2.new(0.5, -88, 0, 15)
-            }
+            { Size = UDim2.new(0, 176, 0, 44), Position = UDim2.new(0.5, -88, 0, 15) }
         )
 
         swellTween:Play()
@@ -934,16 +1268,10 @@ function iOS26Glass:CreateWindow(titleText)
         local menuTween = TweenService:Create(
             MainFrame,
             TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-            {
-                Size = originalSize,
-                Position = openPosition
-            }
+            { Size = originalSize, Position = openPosition }
         )
 
-        TweenService:Create(MainCorner, TweenInfo.new(0.35), {
-            CornerRadius = UDim.new(0, 22)
-        }):Play()
-
+        TweenService:Create(MainCorner, TweenInfo.new(0.35), { CornerRadius = UDim.new(0, 22) }):Play()
         menuTween:Play()
         menuTween.Completed:Wait()
 
@@ -958,19 +1286,14 @@ function iOS26Glass:CreateWindow(titleText)
     MinimizeBtn.MouseButton1Click:Connect(minimizeMenu)
 
     MainFrame.InputBegan:Connect(function(input)
-        if isMinimized
-        and not isAnimating
-        and (
-            input.UserInputType == Enum.UserInputType.MouseButton1
-            or input.UserInputType == Enum.UserInputType.Touch
+        if isMinimized and not isAnimating and (
+            input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
         ) then
             expandMenu()
         end
     end)
 
-    local Window = {
-        ActiveTab = nil
-    }
+    local Window = { ActiveTab = nil }
 
     function Window:AddTab(tabName)
         local TabButton = Instance.new("TextButton")
@@ -1039,6 +1362,75 @@ function iOS26Glass:CreateWindow(titleText)
 
         local Tab = {}
 
+        function Tab:AddProfileCard()
+            local ProfileFrame = Instance.new("Frame")
+            ProfileFrame.Size = UDim2.new(1, 0, 0, 48)
+            ProfileFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            ProfileFrame.BackgroundTransparency = 0.78
+            ProfileFrame.Parent = TabContent
+
+            local PCorner = Instance.new("UICorner")
+            PCorner.CornerRadius = UDim.new(0, 10)
+            PCorner.Parent = ProfileFrame
+
+            local PStroke = Instance.new("UIStroke")
+            PStroke.Thickness = 1.5
+            PStroke.Color = Color3.fromRGB(255, 255, 255)
+            PStroke.Transparency = 0.5
+            PStroke.Parent = ProfileFrame
+
+            local CircleAvatar = Instance.new("ImageLabel")
+            CircleAvatar.Size = UDim2.new(0, 34, 0, 34)
+            CircleAvatar.Position = UDim2.new(0, 8, 0.5, -17)
+            CircleAvatar.BackgroundTransparency = 1
+            CircleAvatar.Parent = ProfileFrame
+
+            local CircleCorner = Instance.new("UICorner")
+            CircleCorner.CornerRadius = UDim.new(1, 0)
+            CircleCorner.Parent = CircleAvatar
+
+            local CircleStroke = Instance.new("UIStroke")
+            CircleStroke.Thickness = 1.5
+            CircleStroke.Color = Color3.fromRGB(255, 255, 255)
+            CircleStroke.Transparency = 0.5
+            CircleStroke.Parent = CircleAvatar
+
+            task.spawn(function()
+                local content, isLoaded = Players:GetUserThumbnailAsync(
+                    LocalPlayer.UserId,
+                    Enum.ThumbnailType.HeadShot,
+                    Enum.ThumbnailSize.Size420x420
+                )
+                if isLoaded and content then
+                    CircleAvatar.Image = content
+                end
+            end)
+
+            local NameLabelLine = Instance.new("TextLabel")
+            NameLabelLine.Size = UDim2.new(1, -52, 0, 16)
+            NameLabelLine.Position = UDim2.new(0, 48, 0, 8)
+            NameLabelLine.BackgroundTransparency = 1
+            NameLabelLine.Text = LocalPlayer.DisplayName
+            NameLabelLine.TextColor3 = Color3.fromRGB(20, 20, 25)
+            NameLabelLine.Font = Enum.Font.GothamBold
+            NameLabelLine.TextSize = 11.5
+            NameLabelLine.TextXAlignment = Enum.TextXAlignment.Left
+            NameLabelLine.TextTruncate = Enum.TextTruncate.AtEnd
+            NameLabelLine.Parent = ProfileFrame
+
+            local UserLabelLine = Instance.new("TextLabel")
+            UserLabelLine.Size = UDim2.new(1, -52, 0, 14)
+            UserLabelLine.Position = UDim2.new(0, 48, 0, 24)
+            UserLabelLine.BackgroundTransparency = 1
+            UserLabelLine.Text = "@" .. LocalPlayer.Name
+            UserLabelLine.TextColor3 = Color3.fromRGB(110, 115, 125)
+            UserLabelLine.Font = Enum.Font.Gotham
+            UserLabelLine.TextSize = 10
+            UserLabelLine.TextXAlignment = Enum.TextXAlignment.Left
+            UserLabelLine.TextTruncate = Enum.TextTruncate.AtEnd
+            UserLabelLine.Parent = ProfileFrame
+        end
+
         function Tab:AddButton(text, callback)
             local BtnFrame = Instance.new("TextButton")
             BtnFrame.Size = UDim2.new(1, 0, 0, 35)
@@ -1062,19 +1454,11 @@ function iOS26Glass:CreateWindow(titleText)
             Stroke.Parent = BtnFrame
 
             BtnFrame.MouseButton1Click:Connect(function()
-                TweenService:Create(BtnFrame, TweenInfo.new(0.08), {
-                    BackgroundTransparency = 0.4
-                }):Play()
-
+                TweenService:Create(BtnFrame, TweenInfo.new(0.08), { BackgroundTransparency = 0.4 }):Play()
                 task.wait(0.08)
+                TweenService:Create(BtnFrame, TweenInfo.new(0.12), { BackgroundTransparency = 0.78 }):Play()
 
-                TweenService:Create(BtnFrame, TweenInfo.new(0.12), {
-                    BackgroundTransparency = 0.78
-                }):Play()
-
-                if callback then
-                    callback()
-                end
+                if callback then callback() end
             end)
         end
 
@@ -1113,9 +1497,7 @@ function iOS26Glass:CreateWindow(titleText)
             SwitchTrack.Size = UDim2.new(0, 44, 0, 24)
             SwitchTrack.AnchorPoint = Vector2.new(1, 0.5)
             SwitchTrack.Position = UDim2.new(1, -8, 0.5, 0)
-            SwitchTrack.BackgroundColor3 = toggled
-                and Color3.fromRGB(48, 209, 88)
-                or Color3.fromRGB(220, 220, 225)
+            SwitchTrack.BackgroundColor3 = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
             SwitchTrack.BackgroundTransparency = toggled and 0.25 or 0.6
             SwitchTrack.Parent = ToggleFrame
 
@@ -1126,9 +1508,7 @@ function iOS26Glass:CreateWindow(titleText)
             local Knob = Instance.new("Frame")
             Knob.AnchorPoint = Vector2.new(0.5, 0.5)
             Knob.Size = UDim2.new(0, 18, 0, 18)
-            Knob.Position = toggled
-                and UDim2.new(1, -11, 0.5, 0)
-                or UDim2.new(0, 11, 0.5, 0)
+            Knob.Position = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
             Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             Knob.BackgroundTransparency = 0.15
             Knob.Parent = SwitchTrack
@@ -1146,47 +1526,122 @@ function iOS26Glass:CreateWindow(titleText)
             ClickArea.MouseButton1Click:Connect(function()
                 toggled = not toggled
 
-                local targetPos = toggled
-                    and UDim2.new(1, -11, 0.5, 0)
-                    or UDim2.new(0, 11, 0.5, 0)
-
-                local targetBg = toggled
-                    and Color3.fromRGB(48, 209, 88)
-                    or Color3.fromRGB(220, 220, 225)
-
+                local targetPos = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
+                local targetBg = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
                 local targetTrans = toggled and 0.25 or 0.6
 
-                TweenService:Create(
-                    Knob,
-                    TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-                    {
-                        Size = UDim2.new(0, 24, 0, 14),
-                        Position = targetPos
-                    }
-                ):Play()
+                TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, 24, 0, 14), Position = targetPos
+                }):Play()
 
-                TweenService:Create(
-                    SwitchTrack,
-                    TweenInfo.new(0.25),
-                    {
-                        BackgroundColor3 = targetBg,
-                        BackgroundTransparency = targetTrans
-                    }
-                ):Play()
+                TweenService:Create(SwitchTrack, TweenInfo.new(0.25), {
+                    BackgroundColor3 = targetBg, BackgroundTransparency = targetTrans
+                }):Play()
 
                 task.wait(0.12)
 
-                TweenService:Create(
-                    Knob,
-                    TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-                    {
-                        Size = UDim2.new(0, 18, 0, 18)
-                    }
-                ):Play()
+                TweenService:Create(Knob, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, 18, 0, 18)
+                }):Play()
 
-                if callback then
-                    callback(toggled)
-                end
+                if callback then callback(toggled) end
+            end)
+        end
+
+        function Tab:AddScrambleToggle(defaultState, callback)
+            local toggled = defaultState or false
+
+            local ToggleFrame = Instance.new("Frame")
+            ToggleFrame.Size = UDim2.new(1, 0, 0, 46)
+            ToggleFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            ToggleFrame.BackgroundTransparency = 0.78
+            ToggleFrame.Parent = TabContent
+
+            local TCorner = Instance.new("UICorner")
+            TCorner.CornerRadius = UDim.new(0, 10)
+            TCorner.Parent = ToggleFrame
+
+            local TStroke = Instance.new("UIStroke")
+            TStroke.Thickness = 1.5
+            TStroke.Color = Color3.fromRGB(255, 255, 255)
+            TStroke.Transparency = 0.5
+            TStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+            TStroke.Parent = ToggleFrame
+
+            local Line1 = Instance.new("TextLabel")
+            Line1.Size = UDim2.new(1, -65, 0, 20)
+            Line1.Position = UDim2.new(0, 10, 0, 4)
+            Line1.BackgroundTransparency = 1
+            Line1.Text = "DR SCRAMBLE's"
+            Line1.TextColor3 = Color3.fromRGB(255, 255, 255)
+            Line1.Font = Enum.Font.GothamBold
+            Line1.TextSize = 13
+            Line1.TextXAlignment = Enum.TextXAlignment.Left
+            Line1.Parent = ToggleFrame
+
+            local Line2 = Instance.new("TextLabel")
+            Line2.Size = UDim2.new(1, -65, 0, 16)
+            Line2.Position = UDim2.new(0, 10, 0, 24)
+            Line2.BackgroundTransparency = 1
+            Line2.Text = "EXPERIMENTS"
+            Line2.TextColor3 = Color3.fromRGB(57, 255, 20)
+            Line2.Font = Enum.Font.GothamBold
+            Line2.TextSize = 6.5
+            Line2.TextXAlignment = Enum.TextXAlignment.Left
+            Line2.Parent = ToggleFrame
+
+            local SwitchTrack = Instance.new("Frame")
+            SwitchTrack.Size = UDim2.new(0, 44, 0, 24)
+            SwitchTrack.AnchorPoint = Vector2.new(1, 0.5)
+            SwitchTrack.Position = UDim2.new(1, -8, 0.5, 0)
+            SwitchTrack.BackgroundColor3 = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
+            SwitchTrack.BackgroundTransparency = toggled and 0.25 or 0.6
+            SwitchTrack.Parent = ToggleFrame
+
+            local TrackCorner = Instance.new("UICorner")
+            TrackCorner.CornerRadius = UDim.new(1, 0)
+            TrackCorner.Parent = SwitchTrack
+
+            local Knob = Instance.new("Frame")
+            Knob.AnchorPoint = Vector2.new(0.5, 0.5)
+            Knob.Size = UDim2.new(0, 18, 0, 18)
+            Knob.Position = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
+            Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            Knob.BackgroundTransparency = 0.15
+            Knob.Parent = SwitchTrack
+
+            local KnobCorner = Instance.new("UICorner")
+            KnobCorner.CornerRadius = UDim.new(1, 0)
+            KnobCorner.Parent = Knob
+
+            local ClickArea = Instance.new("TextButton")
+            ClickArea.Size = UDim2.new(1, 0, 1, 0)
+            ClickArea.BackgroundTransparency = 1
+            ClickArea.Text = ""
+            ClickArea.Parent = ToggleFrame
+
+            ClickArea.MouseButton1Click:Connect(function()
+                toggled = not toggled
+
+                local targetPos = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
+                local targetBg = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
+                local targetTrans = toggled and 0.25 or 0.6
+
+                TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, 24, 0, 14), Position = targetPos
+                }):Play()
+
+                TweenService:Create(SwitchTrack, TweenInfo.new(0.25), {
+                    BackgroundColor3 = targetBg, BackgroundTransparency = targetTrans
+                }):Play()
+
+                task.wait(0.12)
+
+                TweenService:Create(Knob, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, 18, 0, 18)
+                }):Play()
+
+                if callback then callback(toggled) end
             end)
         end
 
@@ -1195,6 +1650,7 @@ function iOS26Glass:CreateWindow(titleText)
             local dragging = false
 
             local SliderFrame = Instance.new("Frame")
+            SliderFrame.Name = "Slider_" .. text
             SliderFrame.Size = UDim2.new(1, 0, 0, 48)
             SliderFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             SliderFrame.BackgroundTransparency = 0.78
@@ -1233,6 +1689,7 @@ function iOS26Glass:CreateWindow(titleText)
             ValLabel.Parent = SliderFrame
 
             local Track = Instance.new("Frame")
+            Track.Name = "Track"
             Track.Size = UDim2.new(1, -20, 0, 7)
             Track.Position = UDim2.new(0, 10, 1, -14)
             Track.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
@@ -1244,12 +1701,8 @@ function iOS26Glass:CreateWindow(titleText)
             TrackCorner.Parent = Track
 
             local Fill = Instance.new("Frame")
-            Fill.Size = UDim2.new(
-                (value - min) / (max - min),
-                0,
-                1,
-                0
-            )
+            Fill.Name = "Fill"
+            Fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
             Fill.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
             Fill.BackgroundTransparency = 0.25
             Fill.Parent = Track
@@ -1261,12 +1714,7 @@ function iOS26Glass:CreateWindow(titleText)
             local Thumb = Instance.new("Frame")
             Thumb.AnchorPoint = Vector2.new(0.5, 0.5)
             Thumb.Size = UDim2.new(0, 14, 0, 14)
-            Thumb.Position = UDim2.new(
-                (value - min) / (max - min),
-                0,
-                0.5,
-                0
-            )
+            Thumb.Position = UDim2.new((value - min) / (max - min), 0, 0.5, 0)
             Thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             Thumb.BackgroundTransparency = 0.15
             Thumb.Parent = Track
@@ -1275,97 +1723,61 @@ function iOS26Glass:CreateWindow(titleText)
             ThumbCorner.CornerRadius = UDim.new(1, 0)
             ThumbCorner.Parent = Thumb
 
-            local function update(input)
-                local relativeX = math.clamp(
-                    (input.Position.X - Track.AbsolutePosition.X)
-                    / Track.AbsoluteSize.X,
-                    0,
-                    1
-                )
+            local isLocked = false
 
-                local newValue = math.floor(
-                    min + (max - min) * relativeX
-                )
+            local function update(input)
+                if isLocked then return end
+                local relativeX = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
+                local newValue = math.floor(min + (max - min) * relativeX)
 
                 value = newValue
                 ValLabel.Text = tostring(value)
                 Fill.Size = UDim2.new(relativeX, 0, 1, 0)
                 Thumb.Position = UDim2.new(relativeX, 0, 0.5, 0)
 
-                if callback then
-                    callback(value)
-                end
+                if callback then callback(value) end
             end
 
             SliderFrame.InputBegan:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
-
+                if isLocked then return end
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = true
-
-                    TweenService:Create(
-                        Thumb,
-                        TweenInfo.new(
-                            0.2,
-                            Enum.EasingStyle.Back,
-                            Enum.EasingDirection.Out
-                        ),
-                        {
-                            Size = UDim2.new(0, 26, 0, 18),
-                            BackgroundTransparency = 0.05
-                        }
-                    ):Play()
-
-                    TweenService:Create(
-                        Track,
-                        TweenInfo.new(0.2),
-                        {
-                            Size = UDim2.new(1, -20, 0, 9)
-                        }
-                    ):Play()
-
+                    TweenService:Create(Thumb, TweenInfo.new(0.2, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                        Size = UDim2.new(0, 26, 0, 18), BackgroundTransparency = 0.05
+                    }):Play()
+                    TweenService:Create(Track, TweenInfo.new(0.2), { Size = UDim2.new(1, -20, 0, 9) }):Play()
                     update(input)
                 end
             end)
 
             UserInputService.InputChanged:Connect(function(input)
-                if dragging
-                and (
-                    input.UserInputType == Enum.UserInputType.MouseMovement
-                    or input.UserInputType == Enum.UserInputType.Touch
-                ) then
+                if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
                     update(input)
                 end
             end)
 
             UserInputService.InputEnded:Connect(function(input)
-                if input.UserInputType == Enum.UserInputType.MouseButton1
-                or input.UserInputType == Enum.UserInputType.Touch then
-
+                if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = false
-
-                    TweenService:Create(
-                        Thumb,
-                        TweenInfo.new(
-                            0.25,
-                            Enum.EasingStyle.Back,
-                            Enum.EasingDirection.Out
-                        ),
-                        {
-                            Size = UDim2.new(0, 14, 0, 14),
-                            BackgroundTransparency = 0.15
-                        }
-                    ):Play()
-
-                    TweenService:Create(
-                        Track,
-                        TweenInfo.new(0.25),
-                        {
-                            Size = UDim2.new(1, -20, 0, 7)
-                        }
-                    ):Play()
+                    TweenService:Create(Thumb, TweenInfo.new(0.25, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                        Size = UDim2.new(0, 14, 0, 14), BackgroundTransparency = 0.15
+                    }):Play()
+                    TweenService:Create(Track, TweenInfo.new(0.25), { Size = UDim2.new(1, -20, 0, 7) }):Play()
                 end
             end)
+
+            return {
+                SetLocked = function(locked)
+                    isLocked = locked
+                    if locked then
+                        Fill.BackgroundColor3 = Color3.fromRGB(128, 128, 128)
+                        Label.TextColor3 = Color3.fromRGB(140, 140, 145)
+                    else
+                        Fill.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
+                        Label.TextColor3 = Color3.fromRGB(20, 20, 25)
+                    end
+                end
+            }
         end
 
         return Tab
@@ -1375,36 +1787,38 @@ function iOS26Glass:CreateWindow(titleText)
 end
 
 -- =================================================================
--- THIẾT LẬP MENU MAIN & TABS
+-- THIẾT LẬP MENU MAIN & TABS (SẮP XẾP MỚI)
 -- =================================================================
 local Library = iOS26Glass:CreateWindow("Dragon Nova Hub")
 
 local MainTab   = Library:AddTab("Main")
 local ArenaTab  = Library:AddTab("Arena")
-local BypassTab = Library:AddTab("Bypass")
+local PlayerTab = Library:AddTab("Player")
 local MiscTab   = Library:AddTab("Misc")
 
 -- =================================================================
 -- TAB MAIN
 -- =================================================================
+MainTab:AddScrambleToggle(drScrambleActive, function(val)
+    drScrambleActive = val
+    if val then
+        if getgenv().DrScrambleKick then
+            getgenv().DrScrambleKick()
+        end
+    else
+        stopTeleport()
+        if stopDrScramble then stopDrScramble() end
+        lockedTarget = nil
+    end
+end)
+
 MainTab:AddToggle("Auto Steal", autoSteal, function(val)
     autoSteal = val
 end)
 
 MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     autoZoneActive = val
-
-    if not val then
-        autoZoneState = 0
-    end
-end)
-
-MainTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
-    speedVal = val
-end)
-
-MainTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
-    chunkVal = val
+    if not val then autoZoneState = 0 end
 end)
 
 -- =================================================================
@@ -1415,61 +1829,60 @@ ArenaTab:AddToggle("Hiện cụm nút Arena", true, function(state)
 end)
 
 for _, data in ipairs(miniButtonsData) do
-    ArenaTab:AddToggle(
-        data.icon .. " " .. data.id,
-        true,
-        function(state)
-            local obj = miniButtonObjects[data.id]
+    ArenaTab:AddToggle(data.icon .. " " .. data.id, true, function(state)
+        local obj = miniButtonObjects[data.id]
+        if obj and obj.btn then
+            obj.btn.Visible = state
+            if not state and buttonStates[obj.btn] then
+                buttonStates[obj.btn] = false
+                stopTeleport()
 
-            if obj and obj.btn then
-                obj.btn.Visible = state
-
-                if not state and buttonStates[obj.btn] then
-                    buttonStates[obj.btn] = false
-                    stopTeleport()
-
-                    TweenService:Create(
-                        obj.stroke,
-                        TweenInfo.new(0.2),
-                        {
-                            Color = Color3.fromRGB(255, 255, 255)
-                        }
-                    ):Play()
-                end
+                TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
+                    Color = Color3.fromRGB(255, 255, 255)
+                }):Play()
             end
         end
-    )
+    end)
 end
 
 -- =================================================================
--- TAB BYPASS
+-- TAB PLAYER
 -- =================================================================
-BypassTab:AddToggle("Auto bat", false, function(val)
-    autoBatActive = val
+PlayerTab:AddProfileCard()
+
+PlayerTab:AddSlider("SpeedWalk", 1, 1000, tpWalkSpeed, function(val)
+    tpWalkSpeed = val
 end)
 
-BypassTab:AddToggle("God Mode", false, function(val)
-    godModeActive = val
+PlayerTab:AddToggle("Activate", false, function(val)
+    tpWalkActive = val
+end)
+
+PlayerTab:AddToggle("God mode", godModeEnabled, function(val)
+    godModeEnabled = val
     toggleGodMode(val)
 end)
 
-BypassTab:AddToggle("Anti Trap", antiTrapActive, function(val)
-    antiTrapActive = val
-
-    if not antiTrapActive then
-        removeTrapESP()
-    end
+PlayerTab:AddToggle("Auto Bat", false, function(val)
+    autoBatActive = val
 end)
 
-BypassTab:AddToggle("Hitbox (15x15)", hitboxActive, function(val)
-    hitboxActive = val
+PlayerTab:AddToggle("Anti Stun", antiStun, function(val)
+    antiStun = val
+end)
 
+PlayerTab:AddToggle("Anti Trap", antiTrapActive, function(val)
+    antiTrapActive = val
+    if not antiTrapActive then removeTrapESP() end
+end)
+
+PlayerTab:AddToggle("Hit box", hitboxActive, function(val)
+    hitboxActive = val
     if not hitboxActive then
         pcall(function()
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer and player.Character then
                     local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-
                     if hrp then
                         hrp.Size = Vector3.new(2, 2, 1)
                         hrp.Transparency = 1
@@ -1481,25 +1894,19 @@ BypassTab:AddToggle("Hitbox (15x15)", hitboxActive, function(val)
     end
 end)
 
-BypassTab:AddToggle("Anti Stun", antiStun, function(val)
-    antiStun = val
-end)
-
 -- =================================================================
 -- TAB MISC
 -- =================================================================
+MiscTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
+    speedVal = val
+end)
 
--- GHI CHÚ
-MiscTab:AddButton(
-    "Fix lag/boost Fps sẽ xoá những hiệu ứng không cần thiết\nXoá Map sẽ ẩn toàn bộ map GPU giảm tải",
-    function()
-        -- Chỉ là ghi chú, không thực hiện hành động
-    end
-)
+MiscTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
+    chunkVal = val
+end)
 
--- =================================================================
--- FIX LAG / BOOST FPS
--- =================================================================
+MiscTab:AddButton("Fix lag/boost Fps sẽ xoá những hiệu ứng không cần thiết\nXoá Map sẽ ẩn toàn bộ map GPU giảm tải", function() end)
+
 MiscTab:AddButton("Fix Lag / Boost FPS", function()
     pcall(function()
         local Workspace = game:GetService("Workspace")
@@ -1507,35 +1914,21 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
 
         local function optimize(obj)
             pcall(function()
-                if obj:IsA("ParticleEmitter")
-                or obj:IsA("Trail")
-                or obj:IsA("Beam")
-                or obj:IsA("Smoke")
-                or obj:IsA("Fire")
-                or obj:IsA("Sparkles") then
-
+                if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
                     obj.Enabled = false
-
                 elseif obj:IsA("Explosion") then
                     obj.BlastPressure = 0
                     obj.BlastRadius = 0
-
                 elseif obj:IsA("BasePart") then
                     obj.CastShadow = false
                     obj.Material = Enum.Material.SmoothPlastic
                     obj.Reflectance = 0
-
-                elseif obj:IsA("Texture")
-                or obj:IsA("Decal") then
-
+                elseif obj:IsA("Texture") or obj:IsA("Decal") then
                     obj.Texture = ""
-
                 elseif obj:IsA("MeshPart") then
                     obj.TextureID = ""
-
                 elseif obj:IsA("SpecialMesh") then
                     obj.TextureId = ""
-
                 elseif obj:IsA("SurfaceAppearance") then
                     obj:Destroy()
                 end
@@ -1550,12 +1943,7 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
             Lighting.EnvironmentSpecularScale = 0
 
             for _, effect in ipairs(Lighting:GetChildren()) do
-                if effect:IsA("BloomEffect")
-                or effect:IsA("ColorCorrectionEffect")
-                or effect:IsA("SunRaysEffect")
-                or effect:IsA("DepthOfFieldEffect")
-                or effect:IsA("BlurEffect") then
-
+                if effect:IsA("BloomEffect") or effect:IsA("ColorCorrectionEffect") or effect:IsA("SunRaysEffect") or effect:IsA("DepthOfFieldEffect") or effect:IsA("BlurEffect") then
                     effect.Enabled = false
                 end
             end
@@ -1563,75 +1951,45 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
 
         pcall(function()
             local Terrain = Workspace.Terrain
-
             Terrain.WaterWaveSize = 0
             Terrain.WaterWaveSpeed = 0
             Terrain.WaterReflectance = 0
             Terrain.WaterTransparency = 1
         end)
 
-        for _, obj in ipairs(game:GetDescendants()) do
-            optimize(obj)
-        end
+        for _, obj in ipairs(game:GetDescendants()) do optimize(obj) end
 
         if not getgenv().FTGS_FixLagConnection then
-            getgenv().FTGS_FixLagConnection =
-                game.DescendantAdded:Connect(function(obj)
-                    task.defer(function()
-                        optimize(obj)
-                    end)
-                end)
+            getgenv().FTGS_FixLagConnection = game.DescendantAdded:Connect(function(obj)
+                task.defer(function() optimize(obj) end)
+            end)
         end
 
-        pcall(function()
-            settings().Rendering.QualityLevel =
-                Enum.QualityLevel.Level01
-        end)
+        pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     end)
 end)
 
--- =================================================================
--- HIDE MAP
--- Không xoá Build, chỉ ẩn LOCAL
--- ON  = ẩn workspace.__OBJECTS.Build
--- OFF = hiện lại
--- =================================================================
 local mapHidden = false
-
 local function setBuildHidden(state)
     pcall(function()
         local objects = workspace:FindFirstChild("__OBJECTS")
-        if not objects then
-            return
-        end
-
+        if not objects then return end
         local build = objects:FindFirstChild("Build")
-        if not build then
-            return
-        end
+        if not build then return end
 
-        -- Nếu chính Build là BasePart
         if build:IsA("BasePart") then
             build.LocalTransparencyModifier = state and 1 or 0
         end
 
-        -- Các Part/Texture/Decal bên trong Build
         for _, obj in ipairs(build:GetDescendants()) do
             pcall(function()
                 if obj:IsA("BasePart") then
-                    -- Không Destroy, chỉ ẩn phía client
-                    obj.LocalTransparencyModifier =
-                        state and 1 or 0
-
-                elseif obj:IsA("Decal")
-                or obj:IsA("Texture") then
-
-                    obj.Transparency =
-                        state and 1 or 0
+                    obj.LocalTransparencyModifier = state and 1 or 0
+                elseif obj:IsA("Decal") or obj:IsA("Texture") then
+                    obj.Transparency = state and 1 or 0
                 end
             end)
         end
-
         mapHidden = state
     end)
 end
@@ -1642,14 +2000,165 @@ MiscTab:AddToggle("Hide Map", false, function(state)
 end)
 
 -- =================================================================
--- SERVER HOP
+-- DELETE MAP (SÀN ĐƯỢC TĂNG TỪ 50x50 LÊN 200x200 STUDS)
 -- =================================================================
+local deleteMapActive = false
+local deleteMapLoopThread = nil
+
+local function runDeleteMapLogic()
+    pcall(function()
+        if getgenv().DynamicFloorCleanup then
+            getgenv().DynamicFloorCleanup()
+        end
+
+        local floorPart = nil
+        local wallLeft = nil
+        local wallRight = nil
+        local wallFolder = nil
+        local heartbeatConnection = nil
+        local isEnabled = false
+
+        local uiName = "FollowFloorUI_System"
+
+        local oldUI = CoreGui:FindFirstChild(uiName) or (LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild(uiName))
+        if oldUI then oldUI:Destroy() end
+
+        local function destroyBuildMap()
+            pcall(function()
+                local objects = workspace:FindFirstChild("__OBJECTS")
+                if objects and objects:FindFirstChild("Build") then
+                    objects.Build:Destroy()
+                end
+            end)
+        end
+
+        local function cleanup()
+            isEnabled = false
+            if heartbeatConnection then
+                heartbeatConnection:Disconnect()
+                heartbeatConnection = nil
+            end
+            if floorPart then floorPart:Destroy() floorPart = nil end
+            if wallLeft then wallLeft:Destroy() wallLeft = nil end
+            if wallRight then wallRight:Destroy() wallRight = nil end
+            if wallFolder then wallFolder:Destroy() wallFolder = nil end
+        end
+        getgenv().DynamicFloorCleanup = cleanup
+
+        local function enableSystem()
+            cleanup()
+            isEnabled = true
+
+            destroyBuildMap()
+
+            wallFolder = Instance.new("Folder")
+            wallFolder.Name = "Dynamic_200Stud_System"
+            wallFolder.Parent = workspace
+
+            floorPart = Instance.new("Part")
+            floorPart.Name = "Dynamic_Floor"
+            floorPart.Size = Vector3.new(200, 10, 200)
+            floorPart.CanCollide = true
+            floorPart.Anchored = true
+            floorPart.Transparency = 1
+            floorPart.Parent = wallFolder
+
+            wallLeft = Instance.new("Part")
+            wallLeft.Name = "Wall_Left_Dynamic"
+            wallLeft.Size = Vector3.new(200, 52, 10)
+            wallLeft.CanCollide = true
+            wallLeft.Anchored = true
+            wallLeft.Transparency = 1
+            wallLeft.Parent = wallFolder
+
+            wallRight = Instance.new("Part")
+            wallRight.Name = "Wall_Right_Dynamic"
+            wallRight.Size = Vector3.new(200, 52, 10)
+            wallRight.CanCollide = true
+            wallRight.Anchored = true
+            wallRight.Transparency = 1
+            wallRight.Parent = wallFolder
+
+            heartbeatConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    if not char then return end
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+
+                    if hrp and isEnabled then
+                        local charX = hrp.Position.X
+                        local charZ = hrp.Position.Z
+
+                        if floorPart and floorPart.Parent then
+                            floorPart.CFrame = CFrame.new(charX, 63, charZ)
+                        end
+
+                        if charX < 549 then
+                            if wallLeft and wallLeft.Parent then
+                                wallLeft.CFrame = CFrame.new(charX, -500, -433)
+                            end
+                            if wallRight and wallRight.Parent then
+                                wallRight.CFrame = CFrame.new(charX, -500, -295.5)
+                            end
+                        else
+                            if wallLeft and wallLeft.Parent then
+                                wallLeft.CFrame = CFrame.new(charX, 94, -433)
+                            end
+                            if wallRight and wallRight.Parent then
+                                wallRight.CFrame = CFrame.new(charX, 94, -295.5)
+                            end
+                        end
+                    end
+                end)
+            end)
+        end
+
+        enableSystem()
+    end)
+end
+
+MiscTab:AddToggle("Delete Map", false, function(state)
+    deleteMapActive = state
+
+    if state then
+        runDeleteMapLogic()
+
+        deleteMapLoopThread = task.spawn(function()
+            while deleteMapActive do
+                task.wait(300)
+                if deleteMapActive then
+                    runDeleteMapLogic()
+                end
+            end
+        end)
+    else
+        if deleteMapLoopThread then
+            task.cancel(deleteMapLoopThread)
+            deleteMapLoopThread = nil
+        end
+
+        if getgenv().DynamicFloorCleanup then
+            getgenv().DynamicFloorCleanup()
+        end
+    end
+end)
+
 MiscTab:AddButton("Server NhiiiX-HopSV", function()
     pcall(function()
-        loadstring(
-            game:HttpGet(
-                "https://raw.githubusercontent.com/Nhoiii/NhoiiiX-Hub-Dev/refs/heads/main/NhoiiiHopSv.lua"
-            )
-        )()
+        loadstring(game:HttpGet("https://raw.githubusercontent.com/Nhoiii/NhoiiiX-Hub-Dev/refs/heads/main/NhoiiiHopSv.lua"))()
     end)
+end)
+
+-- =================================================================
+-- PHÍM TẮT: C = TẮT DR SCRAMBLE
+-- =================================================================
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if gpe then return end
+
+    if input.KeyCode == Enum.KeyCode.C then
+        drScrambleActive = false
+        if stopDrScramble then stopDrScramble() end
+        lockedTarget = nil
+        print("[DrScramble] TẮT (C)")
+    end
 end)
