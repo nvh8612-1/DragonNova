@@ -50,7 +50,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- HỆ THỐNG NÚT MINI ARENA (CẤU TRÚC 2 HÀNG X 4 CỘT)
+-- HỆ THỐNG NÚT MINI ARENA (2 HÀNG X 4 CỘT)
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -247,12 +247,25 @@ for _, data in ipairs(miniButtonsData) do
 end
 
 -- =================================================================
--- LOGIC DR SCRAMBLE'S EXPERIMENTS TELEPORT (GHIM 1 MỤC TIÊU)
+-- LOGIC DR SCRAMBLE - CHỈ CHẠY KHI TOGGLE BẬT
+-- Phút 30/0 (giờ VN +7) → Bay Volcano (arrive=5) → Bám Drone
 -- =================================================================
-local SCRAMBLE_SPEED = 400
-local drToken = 0
-local drTween = nil
-local lockedTarget = nil
+local SCRAMBLE_SPEED  = 400
+local STATIC_TIMEOUT  = 1.0
+local MOVE_THRESHOLD  = 0.1
+
+local VOLCANO_CF      = CFrame.new(1878, 70, -395)
+local VOLCANO_ARRIVE  = 5
+
+local drToken         = 0
+local drTween         = nil
+local lockedTarget    = nil
+
+local cycleActive     = false
+local volcanoArrived  = false
+local lastCycleMinute = -1
+
+local targetStates = {}
 
 local function getObjectCFrame(targetObj)
     if not targetObj then return nil end
@@ -271,21 +284,63 @@ local function isScrambleTargetValid(obj)
     return true
 end
 
+local function updateTargetState(obj)
+    if not obj then return false end
+    local state = targetStates[obj]
+    local currentCF = getObjectCFrame(obj)
+    if not currentCF then return false end
+
+    if not state then
+        targetStates[obj] = { lastCFrame = currentCF, lastMoveTime = os.clock() }
+        return true
+    end
+
+    local posDiff = (currentCF.Position - state.lastCFrame.Position).Magnitude
+    local rotDiff = (currentCF.LookVector - state.lastCFrame.LookVector).Magnitude
+
+    if posDiff > MOVE_THRESHOLD or rotDiff > 0.01 then
+        state.lastCFrame = currentCF
+        state.lastMoveTime = os.clock()
+        return true
+    end
+
+    if (os.clock() - state.lastMoveTime) > STATIC_TIMEOUT then
+        return false
+    end
+    return true
+end
+
 local function findScrambleTarget()
     local folder = workspace:FindFirstChild("ScrambleLocalVisuals")
     if not folder then return nil end
 
     local prefixes = { "PersonalDrone_", "DroneVisual_" }
+    local candidates = {}
+
     for _, prefix in ipairs(prefixes) do
         for _, child in ipairs(folder:GetChildren()) do
-            if child.Name ~= "DrScrambleVFX" and child ~= lockedTarget then
+            if child.Name ~= "DrScrambleVFX" then
                 if child.Name:sub(1, #prefix) == prefix then
-                    return child
+                    table.insert(candidates, child)
                 end
             end
         end
     end
-    return nil
+
+    if #candidates == 0 then return nil end
+
+    local dynamicTarget = nil
+    local fallbackTarget = nil
+
+    for _, obj in ipairs(candidates) do
+        if updateTargetState(obj) then
+            if not dynamicTarget then dynamicTarget = obj end
+        else
+            if not fallbackTarget then fallbackTarget = obj end
+        end
+    end
+
+    return dynamicTarget or fallbackTarget
 end
 
 local function stopDrScramble()
@@ -296,22 +351,18 @@ local function stopDrScramble()
     end
 end
 
-local function doDrScrambleTeleport()
-    if not isScrambleTargetValid(lockedTarget) then
-        lockedTarget = findScrambleTarget()
-        if not lockedTarget then return end
-    end
-
-    local targetCF = getObjectCFrame(lockedTarget)
-    if not targetCF then return end
-
+local function getCharHrp()
     local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return end
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function tweenTo(targetCF)
+    local hrp = getCharHrp()
+    if not hrp or not targetCF then return nil end
 
     local dist = (hrp.Position - targetCF.Position).Magnitude
-    if dist < 3 then return end
+    if dist < 3 then return nil end
 
     drToken = drToken + 1
     local myToken = drToken
@@ -330,6 +381,51 @@ local function doDrScrambleTeleport()
             drTween = nil
         end
     end)
+
+    return myToken
+end
+
+local function goToVolcano()
+    local hrp = getCharHrp()
+    if not hrp then return end
+
+    local dist = (hrp.Position - VOLCANO_CF.Position).Magnitude
+    if dist <= VOLCANO_ARRIVE then
+        volcanoArrived = true
+        return
+    end
+
+    if drTween and drTween.PlaybackState == Enum.PlaybackState.Playing then
+        return
+    end
+
+    volcanoArrived = false
+    tweenTo(VOLCANO_CF)
+end
+
+local function goToDrone()
+    if lockedTarget and isScrambleTargetValid(lockedTarget) then
+        if not updateTargetState(lockedTarget) then
+            lockedTarget = nil
+        end
+    else
+        lockedTarget = nil
+    end
+
+    if not lockedTarget then
+        lockedTarget = findScrambleTarget()
+        if not lockedTarget then return end
+    end
+
+    local targetCF = getObjectCFrame(lockedTarget)
+    if not targetCF then return end
+
+    tweenTo(targetCF)
+end
+
+local function getCurrentMinute()
+    local t = os.date("!*t", os.time() + 7 * 3600)
+    return t.min
 end
 
 task.spawn(function()
@@ -337,30 +433,74 @@ task.spawn(function()
         task.wait(0.2)
 
         if not drScrambleActive then
-            stopDrScramble()
-            lockedTarget = nil
-            task.wait(0.2)
+            if cycleActive or drTween or lockedTarget then
+                stopDrScramble()
+                lockedTarget = nil
+                targetStates = {}
+                cycleActive = false
+                volcanoArrived = false
+                lastCycleMinute = -1
+            end
+            task.wait(0.3)
             continue
         end
 
         pcall(function()
-            if lockedTarget and not isScrambleTargetValid(lockedTarget) then
-                stopDrScramble()
-                lockedTarget = nil
+            local currentMin = getCurrentMinute()
+
+            if currentMin ~= 30 and currentMin ~= 0 then
+                cycleActive = false
             end
 
-            if drTween and drTween.PlaybackState == Enum.PlaybackState.Playing then
+            if (currentMin == 30 or currentMin == 0) and lastCycleMinute ~= currentMin then
+                lastCycleMinute = currentMin
+                cycleActive = true
+                volcanoArrived = false
+                stopDrScramble()
+                lockedTarget = nil
+                goToVolcano()
                 return
             end
 
-            doDrScrambleTeleport()
+            if cycleActive then
+                if not volcanoArrived then
+                    goToVolcano()
+                    return
+                else
+                    if drTween and drTween.PlaybackState == Enum.PlaybackState.Playing then
+                        return
+                    end
+                    goToDrone()
+                    return
+                end
+            end
+
+            if drTween and drTween.PlaybackState == Enum.PlaybackState.Playing then
+                if lockedTarget and isScrambleTargetValid(lockedTarget) then
+                    updateTargetState(lockedTarget)
+                end
+                return
+            end
+
+            goToDrone()
         end)
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(2)
+        for obj in pairs(targetStates) do
+            if not obj or not obj.Parent then
+                targetStates[obj] = nil
+            end
+        end
     end
 end)
 
 getgenv().DrScrambleKick = function()
     task.spawn(function()
-        pcall(doDrScrambleTeleport)
+        pcall(goToDrone)
     end)
 end
 
@@ -372,7 +512,6 @@ local lastPromptTime = 0
 
 local function monitorCharacterStun(char)
     if not char then return end
-
     local hum = char:WaitForChild("Humanoid", 5)
     if not hum then return end
 
@@ -381,20 +520,14 @@ local function monitorCharacterStun(char)
             or newState == Enum.HumanoidStateType.Ragdoll
             or newState == Enum.HumanoidStateType.FallingDown
             or newState == Enum.HumanoidStateType.PlatformStanding then
-
-            if autoZoneActive
-                and autoZoneState == 0
-                and (os.clock() - lastPromptTime <= 3.5) then
+            if autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
                 autoZoneState = 1
             end
         end
     end)
 
     hum:GetPropertyChangedSignal("Sit"):Connect(function()
-        if hum.Sit
-            and autoZoneActive
-            and autoZoneState == 0
-            and (os.clock() - lastPromptTime <= 3.5) then
+        if hum.Sit and autoZoneActive and autoZoneState == 0 and (os.clock() - lastPromptTime <= 3.5) then
             autoZoneState = 1
         end
     end)
@@ -403,18 +536,15 @@ end
 if LocalPlayer.Character then
     monitorCharacterStun(LocalPlayer.Character)
 end
-
 LocalPlayer.CharacterAdded:Connect(monitorCharacterStun)
 
 ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
     if playerWhoTriggered == LocalPlayer then
         lastPromptTime = os.clock()
-
         if autoZoneActive then
             if autoZoneState == 1 then
                 autoZoneState = 2
                 triggerMiniButtonByName("Base")
-
                 task.spawn(function()
                     task.wait(10)
                     autoZoneState = 0
@@ -425,7 +555,7 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
 end)
 
 -- =================================================================
--- GOD MODE LOGIC (CLONE HUMANOID)
+-- GOD MODE LOGIC
 -- =================================================================
 local godModeEnabled = false
 
@@ -442,20 +572,15 @@ local function toggleGodMode(state)
 
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         local rootPart = character:FindFirstChild("HumanoidRootPart")
-
-        if not humanoid or not rootPart then
-            return
-        end
+        if not humanoid or not rootPart then return end
 
         local currentCFrame = rootPart.CFrame
         local newHumanoid = humanoid:Clone()
         newHumanoid.Parent = character
-
         humanoid:Destroy()
 
         LocalPlayer.Character = nil
         LocalPlayer.Character = character
-
         workspace.CurrentCamera.CameraSubject = newHumanoid
 
         task.defer(function()
@@ -469,7 +594,7 @@ local function toggleGodMode(state)
 end
 
 -- =================================================================
--- PROXIMITY PROMPT & BYPASS
+-- PROXIMITY PROMPT BYPASS
 -- =================================================================
 local shownPrompts = {}
 
@@ -484,7 +609,6 @@ end
 local function getPromptPosition(prompt)
     local parent = prompt.Parent
     if not parent then return nil end
-
     if parent:IsA("BasePart") then
         return parent.Position
     elseif parent:IsA("Attachment") then
@@ -492,19 +616,14 @@ local function getPromptPosition(prompt)
     elseif parent:IsA("Model") then
         return parent:GetPivot().Position
     end
-
     return nil
 end
 
 local function triggerPrompt(prompt)
-    if not prompt or not prompt.Enabled then
-        return
-    end
+    if not prompt or not prompt.Enabled then return end
 
     if fireproximityprompt then
-        pcall(function()
-            fireproximityprompt(prompt)
-        end)
+        pcall(function() fireproximityprompt(prompt) end)
     else
         pcall(function()
             prompt:InputHoldBegin()
@@ -517,10 +636,7 @@ end
 ProximityPromptService.PromptShown:Connect(function(prompt)
     bypassPrompt(prompt, 25)
     shownPrompts[prompt] = true
-
-    if autoSteal then
-        triggerPrompt(prompt)
-    end
+    if autoSteal then triggerPrompt(prompt) end
 end)
 
 ProximityPromptService.PromptHidden:Connect(function(prompt)
@@ -536,25 +652,17 @@ end)
 task.spawn(function()
     while true do
         task.wait(0.1)
-
-        if not autoSteal then
-            continue
-        end
+        if not autoSteal then continue end
 
         pcall(function()
             local char = LocalPlayer.Character
             if not char then return end
-
             local hrp = char:FindFirstChild("HumanoidRootPart")
             if not hrp then return end
 
             for prompt, _ in pairs(shownPrompts) do
-                if prompt
-                    and prompt:IsDescendantOf(workspace)
-                    and prompt.Enabled then
-
+                if prompt and prompt:IsDescendantOf(workspace) and prompt.Enabled then
                     local pos = getPromptPosition(prompt)
-
                     if pos then
                         if (hrp.Position - pos).Magnitude <= 25 then
                             triggerPrompt(prompt)
@@ -571,7 +679,7 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- ANTI STUN & KNOCKBACK (KNOCKBACK CHỈ KÍCH KHI ANTI STUN)
+-- ANTI STUN & KNOCKBACK
 -- =================================================================
 local knockbackRunning = false
 local knockbackConn    = nil
@@ -657,7 +765,6 @@ local function setupCharacter(char)
 
             if isBadState(newState) then
                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-
                 local hrp = char:FindFirstChild("HumanoidRootPart")
                 if hrp then
                     hrp.AssemblyLinearVelocity = Vector3.zero
@@ -668,9 +775,7 @@ local function setupCharacter(char)
                     or newState == Enum.HumanoidStateType.RunningNoPhysics
                     or newState == Enum.HumanoidStateType.Landed
                     or newState == Enum.HumanoidStateType.GettingUp then
-
                     stopAntiKnockback()
-
                     local hrp = char:FindFirstChild("HumanoidRootPart")
                     if hrp then
                         lastStableCFrame = hrp.CFrame
@@ -684,7 +789,6 @@ end
 if LocalPlayer.Character then
     setupCharacter(LocalPlayer.Character)
 end
-
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
 
 RunService.Stepped:Connect(function()
@@ -703,15 +807,8 @@ RunService.Stepped:Connect(function()
                     motor.Enabled = true
                 end
             end
-
-            if hum.Sit then
-                hum.Sit = false
-            end
-
-            if hum.PlatformStand then
-                hum.PlatformStand = false
-            end
-
+            if hum.Sit then hum.Sit = false end
+            if hum.PlatformStand then hum.PlatformStand = false end
             hum.AutoRotate = true
         end
 
@@ -727,12 +824,7 @@ end)
 local trapESP = {}
 
 local function createTrapESP(part)
-    if not antiTrapActive
-        or not part
-        or not part:IsA("BasePart")
-        or trapESP[part] then
-        return
-    end
+    if not antiTrapActive or not part or not part:IsA("BasePart") or trapESP[part] then return end
 
     local highlight = Instance.new("Highlight")
     highlight.Name = "DragonNova_TrapESP"
@@ -750,19 +842,14 @@ end
 local function removeTrapESP()
     for part, highlight in pairs(trapESP) do
         pcall(function()
-            if highlight then
-                highlight:Destroy()
-            end
+            if highlight then highlight:Destroy() end
         end)
-
         trapESP[part] = nil
     end
 end
 
 local function disableTrapPart(part)
-    if not part or not part:IsA("BasePart") then
-        return
-    end
+    if not part or not part:IsA("BasePart") then return end
 
     pcall(function()
         part.CanTouch = false
@@ -774,8 +861,7 @@ local function disableTrapPart(part)
         end
 
         for _, child in ipairs(part:GetDescendants()) do
-            if child:IsA("TouchTransmitter")
-                or child.ClassName == "TouchInterest" then
+            if child:IsA("TouchTransmitter") or child.ClassName == "TouchInterest" then
                 child:Destroy()
             end
         end
@@ -796,7 +882,6 @@ local function scanTraps()
                 disableTrapPart(desc)
             end
         end
-
         if child:IsA("BasePart") then
             disableTrapPart(child)
         end
@@ -806,7 +891,6 @@ end
 task.spawn(function()
     while true do
         task.wait(0.1)
-
         if antiTrapActive then
             pcall(scanTraps)
         end
@@ -816,13 +900,11 @@ end)
 task.spawn(function()
     while true do
         task.wait(0.3)
-
         if hitboxActive then
             pcall(function()
                 for _, player in ipairs(Players:GetPlayers()) do
                     if player ~= LocalPlayer and player.Character then
                         local hrp = player.Character:FindFirstChild("HumanoidRootPart")
-
                         if hrp then
                             hrp.Size = Vector3.new(15, 15, 15)
                             hrp.Transparency = 0.75
@@ -892,13 +974,11 @@ local function findAutoBatTool()
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     local scramblerName = "The Scrambler [X1]"
 
-    -- ƯU TIÊN 1: The Scrambler [X1] đang cầm
     local equippedScrambler = char:FindFirstChild(scramblerName)
     if equippedScrambler and equippedScrambler:IsA("Tool") then
         return equippedScrambler, true
     end
 
-    -- ƯU TIÊN 2: The Scrambler [X1] trong Backpack
     if backpack then
         local scramblerInBag = backpack:FindFirstChild(scramblerName)
         if scramblerInBag and scramblerInBag:IsA("Tool") then
@@ -906,14 +986,12 @@ local function findAutoBatTool()
         end
     end
 
-    -- ƯU TIÊN 3: Fallback tool có HitAnim đang cầm
     for _, tool in ipairs(char:GetChildren()) do
         if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
             return tool, true
         end
     end
 
-    -- ƯU TIÊN 4: Fallback tool có HitAnim trong Backpack
     if backpack then
         for _, tool in ipairs(backpack:GetChildren()) do
             if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
@@ -929,9 +1007,7 @@ task.spawn(function()
     while true do
         task.wait(0.1)
 
-        if not autoBatActive then
-            continue
-        end
+        if not autoBatActive then continue end
 
         local tool, equipped = findAutoBatTool()
 
@@ -940,7 +1016,6 @@ task.spawn(function()
             continue
         end
 
-        -- Chưa cầm → equip + chờ 0.8s
         if not equipped then
             local char = LocalPlayer.Character
             local humanoid = char and char:FindFirstChildOfClass("Humanoid")
@@ -952,7 +1027,6 @@ task.spawn(function()
             task.wait(0.8)
         end
 
-        -- Đã cầm → spam M1 liên tục
         while autoBatActive do
             if not tool or not tool.Parent then break end
             if tool.Parent ~= LocalPlayer.Character then break end
@@ -977,7 +1051,6 @@ local function enableDragging(topbar, frame)
     topbar.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1
             or input.UserInputType == Enum.UserInputType.Touch then
-
             dragging = true
             dragStart = input.Position
             startPos = frame.Position
@@ -1000,7 +1073,6 @@ local function enableDragging(topbar, frame)
     UserInputService.InputChanged:Connect(function(input)
         if input == dragInput and dragging then
             local delta = input.Position - dragStart
-
             frame.Position = UDim2.new(
                 startPos.X.Scale,
                 startPos.X.Offset + delta.X,
@@ -1059,30 +1131,51 @@ function iOS26Glass:CreateWindow(titleText)
         ColorSequenceKeypoint.new(0.5, Color3.fromRGB(240, 245, 255)),
         ColorSequenceKeypoint.new(1, Color3.fromRGB(255, 255, 255))
     })
-
     MainGradient.Transparency = NumberSequence.new({
         NumberSequenceKeypoint.new(0, 0.4),
         NumberSequenceKeypoint.new(0.5, 0.75),
         NumberSequenceKeypoint.new(1, 0.8)
     })
-
     MainGradient.Parent = MainFrame
 
     local TopBar = Instance.new("Frame")
     TopBar.Name = "TopBar"
     TopBar.Size = UDim2.new(1, 0, 0, 38)
     TopBar.BackgroundTransparency = 1
-    TopBar.Parent = MainFrame    local Title = Instance.new("TextLabel")
+    TopBar.Parent = MainFrame
+
+    local Title = Instance.new("TextLabel")
     Title.Name = "Title"
-    Title.Size = UDim2.new(1, -70, 1, 0)
+    Title.Size = UDim2.new(0, 120, 1, 0)
     Title.Position = UDim2.new(0, 16, 0, 0)
     Title.BackgroundTransparency = 1
-    Title.Text = titleText or "Liquid Glass Menu"
+    Title.Text = titleText or "Dragon Nova Hub"
     Title.TextColor3 = Color3.fromRGB(15, 15, 20)
     Title.TextSize = 13.5
     Title.Font = Enum.Font.GothamBold
     Title.TextXAlignment = Enum.TextXAlignment.Left
     Title.Parent = TopBar
+
+    -- Đồng hồ Việt Nam (+7) kế bên title, size 40%
+    local TimeLabel = Instance.new("TextLabel")
+    TimeLabel.Name = "TimeLabel"
+    TimeLabel.Size = UDim2.new(0, 110, 1, 0)
+    TimeLabel.Position = UDim2.new(0, 128, 0, 0)
+    TimeLabel.BackgroundTransparency = 1
+    TimeLabel.Text = "Dragon Nova 00:00:00"
+    TimeLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
+    TimeLabel.TextSize = 5.4
+    TimeLabel.Font = Enum.Font.GothamBold
+    TimeLabel.TextXAlignment = Enum.TextXAlignment.Left
+    TimeLabel.Parent = TopBar
+
+    task.spawn(function()
+        while true do
+            local t = os.date("!*t", os.time() + 7 * 3600)
+            TimeLabel.Text = string.format("Dragon Nova %02d:%02d:%02d", t.hour, t.min, t.sec)
+            task.wait(0.25)
+        end
+    end)
 
     local IslandLabel = Instance.new("TextLabel")
     IslandLabel.Name = "IslandLabel"
@@ -1184,7 +1277,6 @@ function iOS26Glass:CreateWindow(titleText)
             Enum.ThumbnailType.HeadShot,
             Enum.ThumbnailSize.Size420x420
         )
-
         if isLoaded and content then
             AvatarImage.Image = content
         end
@@ -1457,7 +1549,6 @@ function iOS26Glass:CreateWindow(titleText)
                 TweenService:Create(BtnFrame, TweenInfo.new(0.08), { BackgroundTransparency = 0.4 }):Play()
                 task.wait(0.08)
                 TweenService:Create(BtnFrame, TweenInfo.new(0.12), { BackgroundTransparency = 0.78 }):Play()
-
                 if callback then callback() end
             end)
         end
@@ -1787,7 +1878,7 @@ function iOS26Glass:CreateWindow(titleText)
 end
 
 -- =================================================================
--- THIẾT LẬP MENU MAIN & TABS (SẮP XẾP MỚI)
+-- THIẾT LẬP MENU MAIN & TABS
 -- =================================================================
 local Library = iOS26Glass:CreateWindow("Dragon Nova Hub")
 
@@ -1836,7 +1927,6 @@ for _, data in ipairs(miniButtonsData) do
             if not state and buttonStates[obj.btn] then
                 buttonStates[obj.btn] = false
                 stopTeleport()
-
                 TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
                     Color = Color3.fromRGB(255, 255, 255)
                 }):Play()
@@ -2000,7 +2090,7 @@ MiscTab:AddToggle("Hide Map", false, function(state)
 end)
 
 -- =================================================================
--- DELETE MAP (SÀN ĐƯỢC TĂNG TỪ 50x50 LÊN 200x200 STUDS)
+-- DELETE MAP (SÀN 200x200 STUDS)
 -- =================================================================
 local deleteMapActive = false
 local deleteMapLoopThread = nil
@@ -2019,7 +2109,6 @@ local function runDeleteMapLogic()
         local isEnabled = false
 
         local uiName = "FollowFloorUI_System"
-
         local oldUI = CoreGui:FindFirstChild(uiName) or (LocalPlayer:FindFirstChild("PlayerGui") and LocalPlayer.PlayerGui:FindFirstChild(uiName))
         if oldUI then oldUI:Destroy() end
 
@@ -2048,7 +2137,6 @@ local function runDeleteMapLogic()
         local function enableSystem()
             cleanup()
             isEnabled = true
-
             destroyBuildMap()
 
             wallFolder = Instance.new("Folder")
