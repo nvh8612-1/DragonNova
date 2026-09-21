@@ -12,7 +12,7 @@ local ProximityPromptService = game:GetService("ProximityPromptService")
 local LocalPlayer = Players.LocalPlayer
 
 -- =================================================================
--- LOGIC TÍNH NĂNG (GAMEPLAY LOGIC)
+-- LOGIC TÍNH NĂNG
 -- =================================================================
 local autoSteal = false
 local antiStun = true
@@ -23,17 +23,15 @@ local godModeActive = false
 local autoBatActive = false
 local drScrambleActive = false
 
--- LOGIC TPWALK
 local tpWalkActive = false
 local tpWalkSpeed = 16
 
--- CẤU HÌNH DI CHUYỂN
 local moveMode = "Teleport"
 local speedVal = 600
 local chunkVal = 12
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
 
--- LOOP TPWALK ENGINE
+-- LOOP TPWALK
 RunService.Heartbeat:Connect(function(deltaTime)
     if tpWalkActive then
         pcall(function()
@@ -50,7 +48,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- HỆ THỐNG NÚT MINI ARENA (2 HÀNG X 4 CỘT)
+-- MINI ARENA 2x4
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -142,16 +140,11 @@ local function startMovement(targetCF, sourceBtn)
                 task.wait(delayTime)
             end
         end)
-
     elseif moveMode == "Tween" then
         local flySpeed = math.max(speedVal, 10)
         local timeToReach = distance / flySpeed
 
-        local tweenInfo = TweenInfo.new(
-            timeToReach,
-            Enum.EasingStyle.Linear,
-            Enum.EasingDirection.Out
-        )
+        local tweenInfo = TweenInfo.new(timeToReach, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
 
         activeTween = TweenService:Create(hrp, tweenInfo, {CFrame = targetCF})
         activeTween:Play()
@@ -214,11 +207,7 @@ for _, data in ipairs(miniButtonsData) do
 
     miniStrokes[btn] = stroke
     buttonStates[btn] = false
-    miniButtonObjects[data.id] = {
-        btn = btn,
-        stroke = stroke,
-        data = data
-    }
+    miniButtonObjects[data.id] = { btn = btn, stroke = stroke, data = data }
 
     btn.MouseButton1Click:Connect(function()
         local isON = not buttonStates[btn]
@@ -247,8 +236,8 @@ for _, data in ipairs(miniButtonsData) do
 end
 
 -- =================================================================
--- LOGIC DR SCRAMBLE - CHỈ CHẠY KHI TOGGLE BẬT
--- Phút 30/0 (giờ VN +7) → Bay Volcano (arrive=5) → Bám Drone
+-- DR SCRAMBLE - CHỈ CHẠY KHI TOGGLE BẬT
+-- Kích hoạt tại 30:03 hoặc 00:03 (giờ VN +7)
 -- =================================================================
 local SCRAMBLE_SPEED  = 400
 local STATIC_TIMEOUT  = 1.0
@@ -423,14 +412,15 @@ local function goToDrone()
     tweenTo(targetCF)
 end
 
-local function getCurrentMinute()
+-- Lấy giờ VN (+7), trả về min, sec
+local function getTimeVN()
     local t = os.date("!*t", os.time() + 7 * 3600)
-    return t.min
+    return t.min, t.sec
 end
 
 task.spawn(function()
     while true do
-        task.wait(0.2)
+        task.wait(0.1)
 
         if not drScrambleActive then
             if cycleActive or drTween or lockedTarget then
@@ -446,13 +436,16 @@ task.spawn(function()
         end
 
         pcall(function()
-            local currentMin = getCurrentMinute()
+            local currentMin, currentSec = getTimeVN()
 
+            -- Reset khi ra khỏi phút 30/0
             if currentMin ~= 30 and currentMin ~= 0 then
                 cycleActive = false
+                lastCycleMinute = -1
             end
 
-            if (currentMin == 30 or currentMin == 0) and lastCycleMinute ~= currentMin then
+            -- Phát hiện 30:03 hoặc 00:03
+            if (currentMin == 30 or currentMin == 0) and currentSec == 3 and lastCycleMinute ~= currentMin then
                 lastCycleMinute = currentMin
                 cycleActive = true
                 volcanoArrived = false
@@ -505,7 +498,7 @@ getgenv().DrScrambleKick = function()
 end
 
 -- =================================================================
--- LOGIC AUTO ZONE
+-- AUTO ZONE
 -- =================================================================
 local autoZoneState = 0
 local lastPromptTime = 0
@@ -533,9 +526,7 @@ local function monitorCharacterStun(char)
     end)
 end
 
-if LocalPlayer.Character then
-    monitorCharacterStun(LocalPlayer.Character)
-end
+if LocalPlayer.Character then monitorCharacterStun(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(monitorCharacterStun)
 
 ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTriggered)
@@ -555,7 +546,7 @@ ProximityPromptService.PromptTriggered:Connect(function(prompt, playerWhoTrigger
 end)
 
 -- =================================================================
--- GOD MODE LOGIC
+-- GOD MODE
 -- =================================================================
 local godModeEnabled = false
 
@@ -584,9 +575,7 @@ local function toggleGodMode(state)
         workspace.CurrentCamera.CameraSubject = newHumanoid
 
         task.defer(function()
-            if rootPart then
-                rootPart.CFrame = currentCFrame
-            end
+            if rootPart then rootPart.CFrame = currentCFrame end
         end)
     else
         LocalPlayer:LoadCharacter()
@@ -609,19 +598,15 @@ end
 local function getPromptPosition(prompt)
     local parent = prompt.Parent
     if not parent then return nil end
-    if parent:IsA("BasePart") then
-        return parent.Position
-    elseif parent:IsA("Attachment") then
-        return parent.WorldPosition
-    elseif parent:IsA("Model") then
-        return parent:GetPivot().Position
+    if parent:IsA("BasePart") then return parent.Position
+    elseif parent:IsA("Attachment") then return parent.WorldPosition
+    elseif parent:IsA("Model") then return parent:GetPivot().Position
     end
     return nil
 end
 
 local function triggerPrompt(prompt)
     if not prompt or not prompt.Enabled then return end
-
     if fireproximityprompt then
         pcall(function() fireproximityprompt(prompt) end)
     else
@@ -754,7 +739,6 @@ local function setupCharacter(char)
     lastStableCFrame = nil
 
     local hum = char:WaitForChild("Humanoid", 5)
-
     if hum then
         hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
@@ -777,18 +761,14 @@ local function setupCharacter(char)
                     or newState == Enum.HumanoidStateType.GettingUp then
                     stopAntiKnockback()
                     local hrp = char:FindFirstChild("HumanoidRootPart")
-                    if hrp then
-                        lastStableCFrame = hrp.CFrame
-                    end
+                    if hrp then lastStableCFrame = hrp.CFrame end
                 end
             end
         end)
     end
 end
 
-if LocalPlayer.Character then
-    setupCharacter(LocalPlayer.Character)
-end
+if LocalPlayer.Character then setupCharacter(LocalPlayer.Character) end
 LocalPlayer.CharacterAdded:Connect(setupCharacter)
 
 RunService.Stepped:Connect(function()
@@ -866,9 +846,7 @@ local function disableTrapPart(part)
             end
         end
 
-        if antiTrapActive then
-            createTrapESP(part)
-        end
+        if antiTrapActive then createTrapESP(part) end
     end)
 end
 
@@ -878,22 +856,16 @@ local function scanTraps()
 
     for _, child in ipairs(debris:GetChildren()) do
         for _, desc in ipairs(child:GetDescendants()) do
-            if desc:IsA("BasePart") then
-                disableTrapPart(desc)
-            end
+            if desc:IsA("BasePart") then disableTrapPart(desc) end
         end
-        if child:IsA("BasePart") then
-            disableTrapPart(child)
-        end
+        if child:IsA("BasePart") then disableTrapPart(child) end
     end
 end
 
 task.spawn(function()
     while true do
         task.wait(0.1)
-        if antiTrapActive then
-            pcall(scanTraps)
-        end
+        if antiTrapActive then pcall(scanTraps) end
     end
 end)
 
@@ -920,7 +892,7 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- AUTO BAT LOGIC (THE SCRAMBLER [X1] + HITANIM)
+-- AUTO BAT - CHUYỂN TOOL 0.3s + SPAM M1 0s
 -- =================================================================
 local function fireAutoBatM1(tool)
     if not tool or not tool.Parent then return end
@@ -967,78 +939,107 @@ local function fireAutoBatM1(tool)
     end
 end
 
-local function findAutoBatTool()
+local function collectAutoBatTools()
+    local list = {}
     local char = LocalPlayer.Character
-    if not char then return nil, false end
+    if not char then return list end
 
     local backpack = LocalPlayer:FindFirstChild("Backpack")
     local scramblerName = "The Scrambler [X1]"
 
-    local equippedScrambler = char:FindFirstChild(scramblerName)
-    if equippedScrambler and equippedScrambler:IsA("Tool") then
-        return equippedScrambler, true
-    end
-
     if backpack then
-        local scramblerInBag = backpack:FindFirstChild(scramblerName)
-        if scramblerInBag and scramblerInBag:IsA("Tool") then
-            return scramblerInBag, false
+        for _, tool in ipairs(backpack:GetChildren()) do
+            if tool:IsA("Tool") then
+                if tool.Name == scramblerName or tool:FindFirstChild("HitAnim") then
+                    table.insert(list, tool)
+                end
+            end
         end
     end
 
     for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
-            return tool, true
-        end
-    end
-
-    if backpack then
-        for _, tool in ipairs(backpack:GetChildren()) do
-            if tool:IsA("Tool") and tool:FindFirstChild("HitAnim") then
-                return tool, false
+        if tool:IsA("Tool") then
+            if tool.Name == scramblerName or tool:FindFirstChild("HitAnim") then
+                local dup = false
+                for _, t in ipairs(list) do
+                    if t == tool then dup = true break end
+                end
+                if not dup then table.insert(list, tool) end
             end
         end
     end
 
-    return nil, false
+    return list
 end
 
 task.spawn(function()
+    local currentIndex = 1
+    local lastSwapTime = 0
+    local SWAP_INTERVAL = 0.3
+
     while true do
-        task.wait(0.1)
+        task.wait(0.05)
 
-        if not autoBatActive then continue end
+        if not autoBatActive then
+            currentIndex = 1
+            lastSwapTime = 0
+            task.wait(0.2)
+            continue
+        end
 
-        local tool, equipped = findAutoBatTool()
+        local char = LocalPlayer.Character
+        local humanoid = char and char:FindFirstChildOfClass("Humanoid")
+        if not humanoid or humanoid.Health <= 0 then
+            task.wait(0.3)
+            continue
+        end
 
-        if not tool then
+        local tools = collectAutoBatTools()
+        if #tools == 0 then
             task.wait(0.4)
             continue
         end
 
-        if not equipped then
-            local char = LocalPlayer.Character
-            local humanoid = char and char:FindFirstChildOfClass("Humanoid")
-            if humanoid and humanoid.Health > 0 then
+        if currentIndex > #tools then currentIndex = 1 end
+
+        local targetTool = tools[currentIndex]
+        if not targetTool or not targetTool.Parent then
+            currentIndex = 1
+            task.wait(0.1)
+            continue
+        end
+
+        local now = os.clock()
+
+        if now - lastSwapTime >= SWAP_INTERVAL then
+            lastSwapTime = now
+
+            if targetTool.Parent ~= char then
                 pcall(function()
-                    humanoid:EquipTool(tool)
+                    humanoid:EquipTool(targetTool)
                 end)
+                task.wait(0.05)
             end
-            task.wait(0.8)
+
+            currentIndex = currentIndex + 1
+            if currentIndex > #tools then currentIndex = 1 end
         end
 
-        while autoBatActive do
-            if not tool or not tool.Parent then break end
-            if tool.Parent ~= LocalPlayer.Character then break end
+        local equippedTool = nil
+        for _, t in ipairs(char:GetChildren()) do
+            if t:IsA("Tool") and (t.Name == "The Scrambler [X1]" or t:FindFirstChild("HitAnim")) then
+                equippedTool = t
+                break
+            end
+        end
 
+        if equippedTool then
             pcall(function()
-                fireAutoBatM1(tool)
+                fireAutoBatM1(equippedTool)
             end)
-
-            RunService.Heartbeat:Wait()
         end
 
-        task.wait(0.1)
+        RunService.Heartbeat:Wait()
     end
 end)
 
@@ -1144,35 +1145,25 @@ function iOS26Glass:CreateWindow(titleText)
     TopBar.BackgroundTransparency = 1
     TopBar.Parent = MainFrame
 
+    -- Title dùng RichText: chữ gốc + giờ VN inline 30%
     local Title = Instance.new("TextLabel")
     Title.Name = "Title"
-    Title.Size = UDim2.new(0, 120, 1, 0)
+    Title.Size = UDim2.new(1, -70, 1, 0)
     Title.Position = UDim2.new(0, 16, 0, 0)
     Title.BackgroundTransparency = 1
-    Title.Text = titleText or "Dragon Nova Hub"
+    Title.Text = (titleText or "Dragon Nova Hub") .. " <font size='4' color='#787882'>00:00:00</font>"
+    Title.RichText = true
     Title.TextColor3 = Color3.fromRGB(15, 15, 20)
     Title.TextSize = 13.5
     Title.Font = Enum.Font.GothamBold
     Title.TextXAlignment = Enum.TextXAlignment.Left
     Title.Parent = TopBar
 
-    -- Đồng hồ Việt Nam (+7) kế bên title, size 40%
-    local TimeLabel = Instance.new("TextLabel")
-    TimeLabel.Name = "TimeLabel"
-    TimeLabel.Size = UDim2.new(0, 110, 1, 0)
-    TimeLabel.Position = UDim2.new(0, 128, 0, 0)
-    TimeLabel.BackgroundTransparency = 1
-    TimeLabel.Text = "Dragon Nova 00:00:00"
-    TimeLabel.TextColor3 = Color3.fromRGB(120, 120, 130)
-    TimeLabel.TextSize = 5.4
-    TimeLabel.Font = Enum.Font.GothamBold
-    TimeLabel.TextXAlignment = Enum.TextXAlignment.Left
-    TimeLabel.Parent = TopBar
-
     task.spawn(function()
         while true do
             local t = os.date("!*t", os.time() + 7 * 3600)
-            TimeLabel.Text = string.format("Dragon Nova %02d:%02d:%02d", t.hour, t.min, t.sec)
+            local clock = string.format("%02d:%02d:%02d", t.hour, t.min, t.sec)
+            Title.Text = (titleText or "Dragon Nova Hub") .. " <font size='4' color='#787882'>" .. clock .. "</font>"
             task.wait(0.25)
         end
     end)
@@ -1423,9 +1414,7 @@ function iOS26Glass:CreateWindow(titleText)
 
         local function activate()
             for _, child in pairs(ContentContainer:GetChildren()) do
-                if child:IsA("ScrollingFrame") then
-                    child.Visible = false
-                end
+                if child:IsA("ScrollingFrame") then child.Visible = false end
             end
 
             for _, btn in pairs(TabHolder:GetChildren()) do
@@ -1493,9 +1482,7 @@ function iOS26Glass:CreateWindow(titleText)
                     Enum.ThumbnailType.HeadShot,
                     Enum.ThumbnailSize.Size420x420
                 )
-                if isLoaded and content then
-                    CircleAvatar.Image = content
-                end
+                if isLoaded and content then CircleAvatar.Image = content end
             end)
 
             local NameLabelLine = Instance.new("TextLabel")
@@ -1878,7 +1865,7 @@ function iOS26Glass:CreateWindow(titleText)
 end
 
 -- =================================================================
--- THIẾT LẬP MENU MAIN & TABS
+-- MENU & TABS
 -- =================================================================
 local Library = iOS26Glass:CreateWindow("Dragon Nova Hub")
 
@@ -1887,15 +1874,11 @@ local ArenaTab  = Library:AddTab("Arena")
 local PlayerTab = Library:AddTab("Player")
 local MiscTab   = Library:AddTab("Misc")
 
--- =================================================================
 -- TAB MAIN
--- =================================================================
 MainTab:AddScrambleToggle(drScrambleActive, function(val)
     drScrambleActive = val
     if val then
-        if getgenv().DrScrambleKick then
-            getgenv().DrScrambleKick()
-        end
+        if getgenv().DrScrambleKick then getgenv().DrScrambleKick() end
     else
         stopTeleport()
         if stopDrScramble then stopDrScramble() end
@@ -1903,21 +1886,14 @@ MainTab:AddScrambleToggle(drScrambleActive, function(val)
     end
 end)
 
-MainTab:AddToggle("Auto Steal", autoSteal, function(val)
-    autoSteal = val
-end)
-
+MainTab:AddToggle("Auto Steal", autoSteal, function(val) autoSteal = val end)
 MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     autoZoneActive = val
     if not val then autoZoneState = 0 end
 end)
 
--- =================================================================
 -- TAB ARENA
--- =================================================================
-ArenaTab:AddToggle("Hiện cụm nút Arena", true, function(state)
-    ArenaContainer.Visible = state
-end)
+ArenaTab:AddToggle("Hiện cụm nút Arena", true, function(state) ArenaContainer.Visible = state end)
 
 for _, data in ipairs(miniButtonsData) do
     ArenaTab:AddToggle(data.icon .. " " .. data.id, true, function(state)
@@ -1935,31 +1911,21 @@ for _, data in ipairs(miniButtonsData) do
     end)
 end
 
--- =================================================================
 -- TAB PLAYER
--- =================================================================
 PlayerTab:AddProfileCard()
 
-PlayerTab:AddSlider("SpeedWalk", 1, 1000, tpWalkSpeed, function(val)
-    tpWalkSpeed = val
-end)
+PlayerTab:AddSlider("SpeedWalk", 1, 1000, tpWalkSpeed, function(val) tpWalkSpeed = val end)
 
-PlayerTab:AddToggle("Activate", false, function(val)
-    tpWalkActive = val
-end)
+PlayerTab:AddToggle("Activate", false, function(val) tpWalkActive = val end)
 
 PlayerTab:AddToggle("God mode", godModeEnabled, function(val)
     godModeEnabled = val
     toggleGodMode(val)
 end)
 
-PlayerTab:AddToggle("Auto Bat", false, function(val)
-    autoBatActive = val
-end)
+PlayerTab:AddToggle("Auto Bat", false, function(val) autoBatActive = val end)
 
-PlayerTab:AddToggle("Anti Stun", antiStun, function(val)
-    antiStun = val
-end)
+PlayerTab:AddToggle("Anti Stun", antiStun, function(val) antiStun = val end)
 
 PlayerTab:AddToggle("Anti Trap", antiTrapActive, function(val)
     antiTrapActive = val
@@ -1984,16 +1950,9 @@ PlayerTab:AddToggle("Hit box", hitboxActive, function(val)
     end
 end)
 
--- =================================================================
 -- TAB MISC
--- =================================================================
-MiscTab:AddSlider("Speed", 10, 1000, speedVal, function(val)
-    speedVal = val
-end)
-
-MiscTab:AddSlider("Chunk", 1, 100, chunkVal, function(val)
-    chunkVal = val
-end)
+MiscTab:AddSlider("Speed", 10, 1000, speedVal, function(val) speedVal = val end)
+MiscTab:AddSlider("Chunk", 1, 100, chunkVal, function(val) chunkVal = val end)
 
 MiscTab:AddButton("Fix lag/boost Fps sẽ xoá những hiệu ứng không cần thiết\nXoá Map sẽ ẩn toàn bộ map GPU giảm tải", function() end)
 
@@ -2089,9 +2048,7 @@ MiscTab:AddToggle("Hide Map", false, function(state)
     setBuildHidden(state)
 end)
 
--- =================================================================
--- DELETE MAP (SÀN 200x200 STUDS)
--- =================================================================
+-- DELETE MAP
 local deleteMapActive = false
 local deleteMapLoopThread = nil
 
@@ -2210,13 +2167,10 @@ MiscTab:AddToggle("Delete Map", false, function(state)
 
     if state then
         runDeleteMapLogic()
-
         deleteMapLoopThread = task.spawn(function()
             while deleteMapActive do
                 task.wait(300)
-                if deleteMapActive then
-                    runDeleteMapLogic()
-                end
+                if deleteMapActive then runDeleteMapLogic() end
             end
         end)
     else
@@ -2224,7 +2178,6 @@ MiscTab:AddToggle("Delete Map", false, function(state)
             task.cancel(deleteMapLoopThread)
             deleteMapLoopThread = nil
         end
-
         if getgenv().DynamicFloorCleanup then
             getgenv().DynamicFloorCleanup()
         end
@@ -2242,7 +2195,6 @@ end)
 -- =================================================================
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-
     if input.KeyCode == Enum.KeyCode.C then
         drScrambleActive = false
         if stopDrScramble then stopDrScramble() end
