@@ -22,7 +22,7 @@ local hitboxActive = true
 local antiTrapActive = true
 local godModeActive = false
 local autoBatActive = false
-local jailBypassActive = false        -- ⭐ Anti Kẻ Giam Giữ
+local jailBypassActive = false
 
 local tpWalkActive = false
 local tpWalkSpeed = 16
@@ -49,7 +49,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- MINI ARENA 2x4 - Ở 20% MÀN HÌNH
+-- MINI ARENA 2x4 - Ở 9%
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -59,8 +59,9 @@ local ArenaContainer = Instance.new("Frame")
 ArenaContainer.Name = "ArenaContainer"
 ArenaContainer.Size = UDim2.new(0, 180, 0, 85)
 ArenaContainer.AnchorPoint = Vector2.new(1, 0)
-ArenaContainer.Position = UDim2.new(1, -20, 0.2, 0)
+ArenaContainer.Position = UDim2.new(1, -20, 0.09, 0)
 ArenaContainer.BackgroundTransparency = 1
+ArenaContainer.Visible = false
 ArenaContainer.Parent = MiniGui
 
 local miniButtonsData = {
@@ -170,6 +171,7 @@ for _, data in ipairs(miniButtonsData) do
     btn.Text = data.icon
     btn.TextSize = 12.5
     btn.AutoButtonColor = false
+    btn.Visible = false
     btn.Parent = ArenaContainer
 
     local corner = Instance.new("UICorner")
@@ -211,267 +213,6 @@ for _, data in ipairs(miniButtonsData) do
 end
 
 -- =================================================================
--- AUTO SECRET / ETERNAL / DIVINE
--- =================================================================
-local rareEggActive = false
-
-local RARE_EGG_LIST = {
-    ["King Snake"] = "Secret", ["Yeti"] = "Secret", ["Cerberus"] = "Secret",
-    ["Kraken"] = "Secret", ["T-Rex"] = "Secret", ["Tralaledon"] = "Secret",
-    ["Cosmic Skeleton Boss"] = "Secret", ["Cosmic Dragon"] = "Secret",
-    ["Stag"] = "Secret", ["Mutant Shark"] = "Secret", ["Pure Jellyfish"] = "Secret",
-    ["Centaur"] = "Secret",
-    ["Ice Dragon"] = "Eternal", ["Phoenix"] = "Eternal", ["Lava Dragon"] = "Eternal",
-    ["El Maja"] = "Eternal", ["Mosasaurus"] = "Eternal", ["Eternal Lunar Dragon"] = "Eternal",
-    ["Oni Tiger"] = "Eternal", ["Gorilla King"] = "Eternal", ["Pegasus"] = "Eternal",
-    ["Unicorn"] = "Divine", ["Kitsune"] = "Divine", ["Nightflame"] = "Divine",
-    ["ArchAngel"] = "Divine", ["World Burner"] = "Divine",
-}
-
-local RARE_RANK = { ["Divine"] = 3, ["Eternal"] = 2, ["Secret"] = 1 }
-local RARE_SPEED = 400
-local RARE_ARRIVE = 5
-local MATCH_RADIUS = 10
-local WAIT_BEFORE_SECOND = 2.7
-local STUN_TIMEOUT = 5
-
-local rareEggList = {}
-local rareLocked = nil
-local rareProcessing = nil
-local rareProcessed = {}
-local rareActiveToken = 0
-local rareActiveTween = nil
-local originalStates = {}
-
-local function findRemoteByName(keyword, classType)
-    for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-        if classType and obj:IsA(classType) then
-            if obj.Name:find(keyword, 1, true) then return obj end
-        elseif not classType and (obj:IsA("RemoteEvent") or obj:IsA("RemoteFunction")) then
-            if obj.Name:find(keyword, 1, true) then return obj end
-        end
-    end
-    return nil
-end
-
-local RareSnapshot = findRemoteByName("AskFieldEggSnapshot", "RemoteFunction")
-local RareShifted  = findRemoteByName("FieldEggShifted", "RemoteEvent")
-local RareCarry    = findRemoteByName("FieldEggCarry", "RemoteEvent")
-local RareGone     = findRemoteByName("FieldEggGone", "RemoteEvent")
-local RareBatch    = findRemoteByName("FieldEggBatchShifted", "RemoteEvent")
-
-local function updateRareRecord(data)
-    if typeof(data) ~= "table" or not data.Uid then return end
-    rareEggList[data.Uid] = rareEggList[data.Uid] or {}
-    rareEggList[data.Uid].category = data.AssetCategory
-    rareEggList[data.Uid].state = data.State
-    rareEggList[data.Uid].cframe = data.BoundsCFrame
-end
-
-local function takeRareSnapshot()
-    if not RareSnapshot then return end
-    local ok, result = pcall(function() return RareSnapshot:InvokeServer() end)
-    if not ok or typeof(result) ~= "table" then return end
-    local records = result.Records
-    if typeof(records) ~= "table" then return end
-    for _, rec in ipairs(records) do updateRareRecord(rec) end
-end
-
-if RareShifted then RareShifted.OnClientEvent:Connect(updateRareRecord) end
-if RareBatch then
-    RareBatch.OnClientEvent:Connect(function(batch)
-        if typeof(batch) == "table" then
-            for _, rec in ipairs(batch) do updateRareRecord(rec) end
-        end
-    end)
-end
-if RareCarry then
-    RareCarry.OnClientEvent:Connect(function(data)
-        if typeof(data) == "table" and data.Uid and rareEggList[data.Uid] then
-            rareEggList[data.Uid].state = data.IsCarrying and "Carried" or nil
-        end
-    end)
-end
-if RareGone then
-    RareGone.OnClientEvent:Connect(function(uid)
-        if uid then rareEggList[uid] = nil rareProcessed[uid] = nil end
-    end)
-end
-
-local function getRareRank(cat)
-    if not cat then return nil end
-    return RARE_EGG_LIST[cat]
-end
-
-local function isRareTarget(uid)
-    local info = rareEggList[uid]
-    if not info then return false end
-    if info.state == "Carried" or info.state == "GuardCarried" then return false end
-    if not info.cframe then return false end
-    if rareProcessed[uid] then return false end
-    if not getRareRank(info.category) then return false end
-    return true
-end
-
-local function pickRareEgg()
-    local char = LocalPlayer.Character
-    if not char then return nil, nil end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return nil, nil end
-
-    local myPos = hrp.Position
-    local candidates = {}
-    for uid, info in pairs(rareEggList) do
-        if isRareTarget(uid) and info.cframe then
-            local d = (info.cframe.Position - myPos).Magnitude
-            local prio = RARE_RANK[getRareRank(info.category)] or 0
-            table.insert(candidates, { uid = uid, cf = info.cframe, dist = d, prio = prio })
-        end
-    end
-    if #candidates == 0 then return nil, nil end
-    table.sort(candidates, function(a, b)
-        if a.prio ~= b.prio then return a.prio > b.prio end
-        return a.dist < b.dist
-    end)
-    return candidates[1].uid, candidates[1].cf
-end
-
-local function cancelRareTween()
-    rareActiveToken = rareActiveToken + 1
-    if rareActiveTween then
-        pcall(function() rareActiveTween:Cancel() end)
-        rareActiveTween = nil
-    end
-    rareLocked = nil
-end
-
-local function tweenRare(targetCF)
-    local char = LocalPlayer.Character
-    if not char then return end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp or not targetCF then return end
-    local dist = (targetCF.Position - hrp.Position).Magnitude
-    if dist < RARE_ARRIVE then rareActiveTween = nil return end
-
-    rareActiveToken = rareActiveToken + 1
-    local myToken = rareActiveToken
-    rareActiveTween = TweenService:Create(hrp, TweenInfo.new(dist / RARE_SPEED, Enum.EasingStyle.Linear, Enum.EasingDirection.Out), {CFrame = targetCF})
-    rareActiveTween:Play()
-    rareActiveTween.Completed:Connect(function()
-        if rareActiveToken == myToken then rareActiveTween = nil end
-    end)
-end
-
-local function fireRarePrompt(eggCF)
-    local nearest, minD = nil, MATCH_RADIUS
-    for _, obj in ipairs(workspace:GetDescendants()) do
-        if obj:IsA("ProximityPrompt") and obj.Name == "CarryAreaEgg" then
-            local p = obj.Parent
-            if p and p:IsA("BasePart") then
-                local d = (p.Position - eggCF.Position).Magnitude
-                if d < minD then minD = d nearest = obj end
-            end
-        end
-    end
-    if not nearest then return end
-    nearest.Enabled = true
-    if fireproximityprompt then pcall(fireproximityprompt, nearest) end
-end
-
-local function waitForStun(timeout)
-    local char = LocalPlayer.Character
-    if not char then return false end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum then return false end
-    local startTime = os.clock()
-    while os.clock() - startTime < timeout do
-        local state = hum:GetState()
-        if state == Enum.HumanoidStateType.Physics or state == Enum.HumanoidStateType.Ragdoll
-            or state == Enum.HumanoidStateType.FallingDown or state == Enum.HumanoidStateType.PlatformStanding then
-            return true
-        end
-        task.wait(0.05)
-    end
-    return false
-end
-
-local function doRareSequence(uid, eggCF)
-    rareProcessing = uid
-    rareProcessed[uid] = true
-
-    local cam = workspace.CurrentCamera
-    local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then rareProcessing = nil return end
-
-    local savedPos = hrp.Position
-    local saveType = cam.CameraType
-    local saveCF = cam.CFrame
-    local saveSubj = cam.CameraSubject
-    local saveFOV = cam.FieldOfView
-
-    local eyePos = eggCF.Position + Vector3.new(0, 8, 0)
-    cam.CameraType = Enum.CameraType.Scriptable
-    cam.CFrame = CFrame.lookAt(eyePos, eggCF.Position)
-    cam.FieldOfView = 40
-
-    task.wait(0.2)
-    fireRarePrompt(eggCF)
-    waitForStun(STUN_TIMEOUT)
-
-    local cChar = LocalPlayer.Character
-    if cChar then
-        local cHrp = cChar:FindFirstChild("HumanoidRootPart")
-        if cHrp then cHrp.CFrame = CFrame.new(savedPos) end
-    end
-
-    task.wait(WAIT_BEFORE_SECOND)
-    fireRarePrompt(eggCF)
-
-    if cam and cam.Parent then
-        cam.CameraType = saveType
-        cam.CameraSubject = saveSubj
-        cam.CFrame = saveCF
-        cam.FieldOfView = saveFOV
-    end
-
-    task.wait(0.2)
-    task.spawn(function() triggerMiniButtonByName("Base") end)
-    task.wait(0.3)
-    rareProcessing = nil
-    rareLocked = nil
-end
-
-local function rareStep()
-    if rareProcessing then return true end
-    local char = LocalPlayer.Character
-    if not char then return false end
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-
-    if rareActiveTween and rareActiveTween.PlaybackState == Enum.PlaybackState.Playing then
-        if rareLocked and rareEggList[rareLocked] then return true end
-        cancelRareTween()
-    end
-
-    local uid, cf = pickRareEgg()
-    if not uid or not cf then
-        if rareLocked then cancelRareTween() end
-        return false
-    end
-
-    local dist = (cf.Position - hrp.Position).Magnitude
-    if dist < RARE_ARRIVE + 4 then
-        task.spawn(function() doRareSequence(uid, cf) end)
-        return true
-    end
-
-    rareLocked = uid
-    tweenRare(cf)
-    return true
-end
-
--- =================================================================
 -- ANTI KẺ GIAM GIỮ (SPEED CARRY BYPASS)
 -- =================================================================
 local JAIL_BASE_CF = CFrame.new(519.01, 70.27, -362.74)
@@ -501,8 +242,7 @@ local JailCarryRE = findJailRemote("FieldEggCarry", "RemoteEvent")
 
 local function jailLockCamera()
     local cam = workspace.CurrentCamera
-    if not cam then return end
-    if jailSavedCamType then return end
+    if not cam or jailSavedCamType then return end
     jailSavedCamType = cam.CameraType
     jailSavedCamSubject = cam.CameraSubject
     cam.CameraType = Enum.CameraType.Scriptable
@@ -1116,7 +856,7 @@ task.spawn(function()
 end)
 
 -- =================================================================
--- SPEED CARRY GUI (ẨN MẶC ĐỊNH, HIỆN KHI BẬT TOGGLE)
+-- SPEED CARRY GUI (ẩn mặc định)
 -- =================================================================
 local speedCarryGui = Instance.new("ScreenGui")
 speedCarryGui.Name = "SpeedCarryGUI"
@@ -1129,7 +869,7 @@ SCFrame.Size = UDim2.new(0, 280, 0, 130)
 SCFrame.Position = UDim2.new(0, 20, 0.5, -65)
 SCFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 SCFrame.BorderSizePixel = 0
-SCFrame.Visible = false                     -- ⭐ Ẩn mặc định
+SCFrame.Visible = false
 SCFrame.Parent = speedCarryGui
 
 local SC_FC = Instance.new("UICorner")
@@ -1145,16 +885,31 @@ local SCToggle = Instance.new("TextButton")
 SCToggle.Size = UDim2.new(1, -12, 0, 44)
 SCToggle.Position = UDim2.new(0, 6, 0, 6)
 SCToggle.BackgroundColor3 = Color3.fromRGB(48, 209, 88)
-SCToggle.Text = "ANTI KẺ GIAM GIỮ [V]"
+SCToggle.Text = "SPEED CARRY [V]"
 SCToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
 SCToggle.Font = Enum.Font.GothamBold
-SCToggle.TextSize = 12
+SCToggle.TextSize = 13
 SCToggle.AutoButtonColor = false
 SCToggle.Parent = SCFrame
 
 local SC_BC = Instance.new("UICorner")
 SC_BC.CornerRadius = UDim.new(0, 8)
 SC_BC.Parent = SCToggle
+
+local SCForce = Instance.new("TextButton")
+SCForce.Size = UDim2.new(1, -12, 0, 30)
+SCForce.Position = UDim2.new(0, 6, 0, 54)
+SCForce.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
+SCForce.Text = "FORCE BYPASS"
+SCForce.TextColor3 = Color3.fromRGB(255, 255, 255)
+SCForce.Font = Enum.Font.GothamBold
+SCForce.TextSize = 11
+SCForce.AutoButtonColor = false
+SCForce.Parent = SCFrame
+
+local SC_FBC = Instance.new("UICorner")
+SC_FBC.CornerRadius = UDim.new(0, 8)
+SC_FBC.Parent = SCForce
 
 local SCStatus = Instance.new("TextLabel")
 SCStatus.Size = UDim2.new(1, -12, 0, 16)
@@ -1215,12 +970,12 @@ end)
 SCToggle.MouseButton1Click:Connect(function()
     jailBypassActive = not jailBypassActive
     if jailBypassActive then
-        SCToggle.Text = "STOP [V]"
+        SCToggle.Text = "ĐANG BẬT [V]"
         SCToggle.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
         SCStatus.Text = "ON - Khóa physics 2s"
         SCStatus.TextColor3 = Color3.fromRGB(48, 209, 88)
     else
-        SCToggle.Text = "ANTI KẺ GIAM GIỮ [V]"
+        SCToggle.Text = "SPEED CARRY [V]"
         SCToggle.BackgroundColor3 = Color3.fromRGB(48, 209, 88)
         SCStatus.Text = "OFF"
         SCStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
@@ -1229,10 +984,14 @@ SCToggle.MouseButton1Click:Connect(function()
     end
 end)
 
+SCForce.MouseButton1Click:Connect(function()
+    task.spawn(jailSpeedCarryBypass)
+end)
+
 UserInputService.InputBegan:Connect(function(input, gpe)
     if gpe then return end
-    if input.KeyCode == Enum.KeyCode.V then
-        if SCFrame.Visible then SCToggle.MouseButton1Click:Fire() end
+    if input.KeyCode == Enum.KeyCode.V and SCFrame.Visible then
+        SCToggle.MouseButton1Click:Fire()
     end
 end)
 
@@ -1291,7 +1050,7 @@ function iOS26Glass:CreateWindow(titleText)
     else ScreenGui.Parent = CoreGui end
 
     local originalSize = UDim2.new(0, 522, 0, 324)
-    local openPosition = UDim2.new(0.5, -261, 0.1, 0)
+    local openPosition = UDim2.new(0.5, -261, 0.09, 0)
     local islandSize = UDim2.new(0, 160, 0, 34)
     local islandPosition = UDim2.new(0.5, -80, 0.05, 0)
 
@@ -1897,44 +1656,15 @@ local MiscTab   = Library:AddTab("Misc")
 
 -- =================================================================
 -- TAB MAIN
--- ⭐ ANTI KẺ GIAM GIỮ ĐẦU TIÊN
+-- ⭐ Anti Kẻ Giam Giữ ĐẦU TIÊN
 -- =================================================================
 MainTab:AddToggle("Anti Kẻ Giam Giữ", false, function(val)
-    jailBypassActive = val
-    -- Chỉ ẩn/hiện menu Speed Carry, không hủy chức năng
     SCFrame.Visible = val
-    print("[JailBypass] Menu " .. (val and "HIỆN" or "ẨN"))
-end)
-
-MainTab:AddToggle("Auto Secret/Eternal/Divine", false, function(val)
-    rareEggActive = val
-    if val then
-        rareProcessed = {}
-        rareEggList = {}
-        task.spawn(takeRareSnapshot)
-        task.spawn(function()
-            local startTime = os.clock()
-            local idleCount = 0
-            while rareEggActive do
-                if os.clock() - startTime > 600 then break end
-                pcall(takeRareSnapshot)
-                local has = false
-                pcall(function() has = rareStep() end)
-                if not has and not rareProcessing and not rareActiveTween then
-                    idleCount = idleCount + 1
-                    if idleCount >= 60 then break end
-                else
-                    idleCount = 0
-                end
-                task.wait(0.5)
-            end
-            rareEggActive = false
-            cancelRareTween()
-            rareProcessing = nil
-        end)
+    if not val then
+        -- Tắt menu: chỉ ẩn, không hủy chức năng
+        print("[JailBypass] Ẩn menu Speed Carry")
     else
-        cancelRareTween()
-        rareProcessing = nil
+        print("[JailBypass] Hiện menu Speed Carry")
     end
 end)
 
@@ -1944,10 +1674,13 @@ MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     if not val then autoZoneState = 0 end
 end)
 
--- TAB ARENA
-ArenaTab:AddToggle("Hiện cụm nút Arena", true, function(state) ArenaContainer.Visible = state end)
+-- TAB ARENA - TẤT CẢ MẶC ĐỊNH TẮT
+ArenaTab:AddToggle("Hiện cụm nút Arena", false, function(state)
+    ArenaContainer.Visible = state
+end)
+
 for _, data in ipairs(miniButtonsData) do
-    ArenaTab:AddToggle(data.icon .. " " .. data.id, true, function(state)
+    ArenaTab:AddToggle(data.icon .. " " .. data.id, false, function(state)
         local obj = miniButtonObjects[data.id]
         if obj and obj.btn then
             obj.btn.Visible = state
@@ -1997,7 +1730,6 @@ end)
 -- TAB MISC
 MiscTab:AddSlider("Speed", 10, 1000, speedVal, function(val) speedVal = val end)
 MiscTab:AddSlider("Chunk", 1, 100, chunkVal, function(val) chunkVal = val end)
-
 MiscTab:AddButton("Fix lag/boost Fps sẽ xoá những hiệu ứng không cần thiết\nXoá Map sẽ ẩn toàn bộ map GPU giảm tải", function() end)
 
 MiscTab:AddButton("Fix Lag / Boost FPS", function()
@@ -2093,4 +1825,4 @@ MiscTab:AddButton("Server NhiiiX-HopSV", function()
     end)
 end)
 
-print("[DragonNova] Loaded | Anti Jail bypass menu | No Dr Scramble")
+print("[DragonNova] Loaded | Menu 9% | Mini Arena 9% | Arena OFF | Anti Jail")
