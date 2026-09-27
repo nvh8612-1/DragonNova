@@ -61,7 +61,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- MINI ARENA - Ở 9% MÀN HÌNH
+-- MINI ARENA - Ở 1% MÀN HÌNH
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -977,9 +977,9 @@ function iOS26Glass:CreateWindow(titleText)
     else ScreenGui.Parent = CoreGui end
 
     local originalSize = UDim2.new(0, 522, 0, 324)
-    local openPosition = UDim2.new(0.5, -261, 0.09, 0)
+    local openPosition = UDim2.new(0.5, -261, 0.01, 0)
     local islandSize = UDim2.new(0, 160, 0, 34)
-    local islandPosition = UDim2.new(0.5, -80, 0.09, 0)
+    local islandPosition = UDim2.new(0.5, -80, 0.01, 0)
 
     local isMinimized = false
     local isAnimating = false
@@ -1847,4 +1847,4 @@ MiscTab:AddButton("Server NhiiiX-HopSV", function()
     end)
 end)
 
-print("[DragonNova] Loaded | Tab Main: Bypass Guard/Fly | Menu 9% | Arena OFF")
+print("[DragonNova] Loaded | Tab Main: Bypass Guard/Fly | Menu 1% | Arena OFF")
