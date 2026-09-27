@@ -71,7 +71,7 @@ local ArenaContainer = Instance.new("Frame")
 ArenaContainer.Name = "ArenaContainer"
 ArenaContainer.Size = UDim2.new(0, 180, 0, 85)
 ArenaContainer.AnchorPoint = Vector2.new(1, 0)
-ArenaContainer.Position = UDim2.new(1, -20, 0.09, 0)
+ArenaContainer.Position = UDim2.new(1, -20, 0.01, 0)
 ArenaContainer.BackgroundTransparency = 1
 ArenaContainer.Visible = false
 ArenaContainer.Parent = MiniGui
@@ -1171,7 +1171,7 @@ function iOS26Glass:CreateWindow(titleText)
 
         local dotTween = TweenService:Create(MainFrame,
             TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-            { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0.5, -9, 0.09, 0) })
+            { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0.5, -9, 0.01, 0) })
         TweenService:Create(MainCorner, TweenInfo.new(0.25), { CornerRadius = UDim.new(1, 0) }):Play()
         dotTween:Play()
         dotTween.Completed:Wait()
@@ -1194,7 +1194,7 @@ function iOS26Glass:CreateWindow(titleText)
 
         local swellTween = TweenService:Create(MainFrame,
             TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-            { Size = UDim2.new(0, 176, 0, 44), Position = UDim2.new(0.5, -88, 0.09, 0) })
+            { Size = UDim2.new(0, 176, 0, 44), Position = UDim2.new(0.5, -88, 0.01, 0) })
         swellTween:Play()
         swellTween.Completed:Wait()
 
