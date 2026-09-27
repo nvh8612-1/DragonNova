@@ -22,7 +22,6 @@ local hitboxActive = true
 local antiTrapActive = true
 local godModeActive = false
 local autoBatActive = false
-local jailBypassActive = false
 
 local tpWalkActive = false
 local tpWalkSpeed = 16
@@ -31,6 +30,19 @@ local moveMode = "Teleport"
 local speedVal = 600
 local chunkVal = 12
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
+
+-- Bypass Guard/Fly
+local bypassGuardActive = false
+local flyActive = false
+local flyFolder = nil
+local flyPlatform = nil
+local flyThread = nil
+local flyCurrentY = 67
+local FLY_START_Y = 67
+local FLY_END_Y = 90
+local FLY_FOLDER_NAME = "Fly"
+local JAIL_HOLD_TIME = 0.2
+local jailTpRunning = false
 
 -- LOOP TPWALK
 RunService.Heartbeat:Connect(function(deltaTime)
@@ -49,7 +61,7 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- MINI ARENA 2x4 - Ở 9%
+-- MINI ARENA - Ở 9% MÀN HÌNH
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
@@ -213,23 +225,9 @@ for _, data in ipairs(miniButtonsData) do
 end
 
 -- =================================================================
--- ANTI KẺ GIAM GIỮ (SPEED CARRY BYPASS)
+-- BYPASS GUARD / FLY LOGIC
 -- =================================================================
-local JAIL_BASE_CF = CFrame.new(519.01, 70.27, -362.74)
-local JAIL_STEP = 5000
-local JAIL_MAX_ITER = 21
-local JAIL_HOLD_TIME = 2.0
-local JAIL_MAX_RETRY = 2
-local JAIL_RETRY_DELAY = 0.4
-
-local jailIsCarrying = false
-local jailBypassRunning = false
-local jailPhysicsLocked = false
-local jailSavedCamType = nil
-local jailSavedCamSubject = nil
-local jailSavedPhysics = {}
-
-local function findJailRemote(keyword, class)
+local function findRemote(keyword, class)
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
         if obj:IsA(class) and obj.Name:find(keyword, 1, true) then
             return obj
@@ -238,174 +236,276 @@ local function findJailRemote(keyword, class)
     return nil
 end
 
-local JailCarryRE = findJailRemote("FieldEggCarry", "RemoteEvent")
+local EggCarryRE = findRemote("FieldEggCarry", "RemoteEvent")
 
-local function jailLockCamera()
-    local cam = workspace.CurrentCamera
-    if not cam or jailSavedCamType then return end
-    jailSavedCamType = cam.CameraType
-    jailSavedCamSubject = cam.CameraSubject
-    cam.CameraType = Enum.CameraType.Scriptable
-end
+-- Teleport base
+local function teleportToBase()
+    if jailTpRunning then return end
+    jailTpRunning = true
 
-local function jailUnlockCamera()
-    if not jailSavedCamType then return end
-    local cam = workspace.CurrentCamera
-    if not cam then return end
-    cam.CameraType = jailSavedCamType or Enum.CameraType.Custom
-    cam.CameraSubject = jailSavedCamSubject
-    jailSavedCamType = nil
-    jailSavedCamSubject = nil
-end
+    local char = LocalPlayer.Character
+    if not char then jailTpRunning = false return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then jailTpRunning = false return end
 
-local function jailDisablePhysics(char, hum, hrp)
-    if not hum or not hrp or jailPhysicsLocked then return end
-    jailPhysicsLocked = true
-    jailSavedPhysics = {
-        walkSpeed = hum.WalkSpeed,
-        jumpPower = hum.JumpPower,
-        platformStand = hum.PlatformStand,
-        autoRotate = hum.AutoRotate,
-    }
-    pcall(function()
-        hum.PlatformStand = true
-        hum.WalkSpeed = 0
-        hum.JumpPower = 0
-        hum.AutoRotate = false
-    end)
-    pcall(function()
-        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, false)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, false)
-    end)
-    pcall(function()
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.AssemblyAngularVelocity = Vector3.zero
-        hrp.Velocity = Vector3.zero
-        hrp.RotVelocity = Vector3.zero
-    end)
-end
-
-local function jailRestorePhysics(hum)
-    if not jailPhysicsLocked then return end
-    jailPhysicsLocked = false
-    if not hum then return end
-    pcall(function()
-        hum.PlatformStand = jailSavedPhysics.platformStand or false
-        hum.WalkSpeed = jailSavedPhysics.walkSpeed or 16
-        hum.JumpPower = jailSavedPhysics.jumpPower or 50
-        hum.AutoRotate = jailSavedPhysics.autoRotate or true
-    end)
-    pcall(function()
-        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, true)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, true)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Physics, true)
-        hum:SetStateEnabled(Enum.HumanoidStateType.PlatformStanding, true)
-        hum:SetStateEnabled(Enum.HumanoidStateType.Freefall, true)
-    end)
-end
-
-local function jailZeroVelocity(hrp)
-    if not hrp then return end
+    hrp.CFrame = baseCFrame
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
     hrp.Velocity = Vector3.zero
     hrp.RotVelocity = Vector3.zero
-end
 
-local function jailTeleportOnce(char, hrp)
-    local iter = 0
-    while iter < JAIL_MAX_ITER do
-        iter = iter + 1
-        jailZeroVelocity(hrp)
-        local myPos = hrp.Position
-        local dir = JAIL_BASE_CF.Position - myPos
-        local d = dir.Magnitude
-        if d < 5 then
-            hrp.CFrame = JAIL_BASE_CF
-            break
-        end
-        hrp.CFrame = CFrame.new(myPos + dir.Unit * math.min(d, JAIL_STEP))
+    local startTime = os.clock()
+    while os.clock() - startTime < JAIL_HOLD_TIME do
         RunService.Heartbeat:Wait()
-    end
-    return iter
-end
-
-local function jailHoldAtBase(char)
-    local holdStart = os.clock()
-    local serverKicked = false
-    while os.clock() - holdStart < JAIL_HOLD_TIME do
-        RunService.Heartbeat:Wait()
-        local cHrp = char:FindFirstChild("HumanoidRootPart")
-        if not cHrp then break end
-        jailZeroVelocity(cHrp)
-        if (cHrp.Position - JAIL_BASE_CF.Position).Magnitude > 100 then
-            serverKicked = true
-            break
+        local c = LocalPlayer.Character
+        if c then
+            local h = c:FindFirstChild("HumanoidRootPart")
+            if h then
+                h.CFrame = baseCFrame
+                h.AssemblyLinearVelocity = Vector3.zero
+                h.AssemblyAngularVelocity = Vector3.zero
+            end
         end
-        cHrp.CFrame = JAIL_BASE_CF
     end
-    return not serverKicked
+
+    print("[BypassGuard] TP base xong")
+    jailTpRunning = false
 end
 
-local function jailSpeedCarryBypass()
-    if jailBypassRunning then return end
-    jailBypassRunning = true
-    if not jailIsCarrying then jailBypassRunning = false return end
+-- Fly
+local function createFlyFolder()
+    if flyFolder and flyFolder.Parent then flyFolder:Destroy() end
+    flyFolder = Instance.new("Folder")
+    flyFolder.Name = FLY_FOLDER_NAME
+    flyFolder.Parent = workspace
+    return flyFolder
+end
+
+local function cleanupFly()
+    if flyThread then
+        task.cancel(flyThread)
+        flyThread = nil
+    end
+    if flyPlatform then
+        flyPlatform:Destroy()
+        flyPlatform = nil
+    end
+    if flyFolder then
+        flyFolder:Destroy()
+        flyFolder = nil
+    end
+    flyCurrentY = FLY_START_Y
+end
+
+local function startFlyPlatform()
+    if flyPlatform and flyPlatform.Parent then return end
 
     local char = LocalPlayer.Character
-    if not char then jailBypassRunning = false return end
+    if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hrp or not hum then jailBypassRunning = false return end
+    if not hrp then return end
 
-    jailLockCamera()
-    jailDisablePhysics(char, hum, hrp)
+    createFlyFolder()
+    flyCurrentY = FLY_START_Y
 
-    for retry = 1, JAIL_MAX_RETRY do
-        if not jailIsCarrying then break end
-        char = LocalPlayer.Character
-        hrp = char and char:FindFirstChild("HumanoidRootPart")
-        hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum then break end
+    flyPlatform = Instance.new("Part")
+    flyPlatform.Name = "FlyPlatform"
+    flyPlatform.Size = Vector3.new(30, 1, 30)
+    flyPlatform.Position = Vector3.new(hrp.Position.X, FLY_START_Y, hrp.Position.Z)
+    flyPlatform.Anchored = true
+    flyPlatform.CanCollide = true
+    flyPlatform.Transparency = 0.3
+    flyPlatform.Color = Color3.fromRGB(0, 150, 255)
+    flyPlatform.Material = Enum.Material.Neon
+    flyPlatform.Parent = flyFolder
 
-        jailTeleportOnce(char, hrp)
-        if jailHoldAtBase(char) then break end
-        task.wait(JAIL_RETRY_DELAY)
-    end
+    print("[Fly] Sàn tại (" .. math.floor(hrp.Position.X) .. ", " .. FLY_START_Y .. ", " .. math.floor(hrp.Position.Z) .. ")")
 
-    hum = char and char:FindFirstChildOfClass("Humanoid")
-    jailRestorePhysics(hum)
-    hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if hrp then jailZeroVelocity(hrp) end
-    jailUnlockCamera()
-    jailBypassRunning = false
-end
-
-if JailCarryRE then
-    JailCarryRE.OnClientEvent:Connect(function(data)
-        if typeof(data) ~= "table" then return end
-        if data.IsCarrying == true and data.Uid then
-            jailIsCarrying = true
-            if jailBypassActive and not jailBypassRunning then
-                task.spawn(jailSpeedCarryBypass)
+    -- Vòng lặp bám X/Z nhân vật
+    flyThread = task.spawn(function()
+        while flyPlatform and flyPlatform.Parent do
+            RunService.Heartbeat:Wait()
+            local c = LocalPlayer.Character
+            if c then
+                local h = c:FindFirstChild("HumanoidRootPart")
+                if h and flyPlatform and flyPlatform.Parent then
+                    flyPlatform.Position = Vector3.new(h.Position.X, flyCurrentY, h.Position.Z)
+                end
+            else
+                break
             end
-        elseif data.IsCarrying == false then
-            jailIsCarrying = false
+        end
+    end)
+
+    -- Vòng lặp nâng Y: 1 stud mỗi 0.5s
+    task.spawn(function()
+        while flyPlatform and flyPlatform.Parent do
+            task.wait(0.5)
+            if flyPlatform and flyPlatform.Parent then
+                if flyCurrentY < FLY_END_Y then
+                    flyCurrentY = flyCurrentY + 1
+                    if flyCurrentY > FLY_END_Y then flyCurrentY = FLY_END_Y end
+                    print("[Fly] Y = " .. flyCurrentY)
+                end
+            end
         end
     end)
 end
 
-task.spawn(function()
-    local wasCarrying = false
-    while true do
-        task.wait(0.05)
-        if jailBypassActive and jailIsCarrying and not wasCarrying and not jailBypassRunning then
-            task.spawn(jailSpeedCarryBypass)
+-- Nghe Carry
+if EggCarryRE then
+    EggCarryRE.OnClientEvent:Connect(function(data)
+        if typeof(data) ~= "table" then return end
+        if data.IsCarrying == true and data.Uid then
+            print("[Event] Lụm trứng: " .. tostring(data.Uid))
+            if bypassGuardActive then task.spawn(teleportToBase) end
+            if flyActive then task.spawn(startFlyPlatform) end
         end
-        wasCarrying = jailIsCarrying
+    end)
+end
+
+-- =================================================================
+-- BYPASS GUARD / FLY GUI (ẩn mặc định, hiện khi bật toggle Tab Main)
+-- =================================================================
+local bfGui = Instance.new("ScreenGui")
+bfGui.Name = "BypassFlyGUI"
+bfGui.ResetOnSpawn = false
+if gethui then bfGui.Parent = gethui() else bfGui.Parent = CoreGui end
+
+local BFFrame = Instance.new("TextButton")
+BFFrame.Name = "BFFrame"
+BFFrame.Size = UDim2.new(0, 220, 0, 140)
+BFFrame.Position = UDim2.new(0, 20, 0.5, -70)
+BFFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+BFFrame.BorderSizePixel = 0
+BFFrame.Text = ""
+BFFrame.AutoButtonColor = false
+BFFrame.Active = true
+BFFrame.Visible = false
+BFFrame.Parent = bfGui
+
+local BFFC = Instance.new("UICorner")
+BFFC.CornerRadius = UDim.new(0, 12)
+BFFC.Parent = BFFrame
+
+local BFFS = Instance.new("UIStroke")
+BFFS.Thickness = 2
+BFFS.Color = Color3.fromRGB(255, 150, 60)
+BFFS.Parent = BFFrame
+
+-- Nút Bypass Guard
+local GuardBtn = Instance.new("TextButton")
+GuardBtn.Name = "GuardBtn"
+GuardBtn.Size = UDim2.new(1, -12, 0, 44)
+GuardBtn.Position = UDim2.new(0, 6, 0, 6)
+GuardBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 60)
+GuardBtn.Text = "BYPASS GUARD"
+GuardBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+GuardBtn.Font = Enum.Font.GothamBold
+GuardBtn.TextSize = 13
+GuardBtn.AutoButtonColor = false
+GuardBtn.Active = true
+GuardBtn.ZIndex = 5
+GuardBtn.Parent = BFFrame
+
+local GBC = Instance.new("UICorner")
+GBC.CornerRadius = UDim.new(0, 8)
+GBC.Parent = GuardBtn
+
+local GuardStatus = Instance.new("TextLabel")
+GuardStatus.Size = UDim2.new(1, -12, 0, 16)
+GuardStatus.Position = UDim2.new(0, 6, 0, 52)
+GuardStatus.BackgroundTransparency = 1
+GuardStatus.Text = "OFF | Lụm trứng → TP base"
+GuardStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
+GuardStatus.Font = Enum.Font.Gotham
+GuardStatus.TextSize = 9
+GuardStatus.ZIndex = 5
+GuardStatus.Parent = BFFrame
+
+-- Nút Fly
+local FlyBtn = Instance.new("TextButton")
+FlyBtn.Name = "FlyBtn"
+FlyBtn.Size = UDim2.new(1, -12, 0, 44)
+FlyBtn.Position = UDim2.new(0, 6, 0, 74)
+FlyBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 60)
+FlyBtn.Text = "FLY"
+FlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+FlyBtn.Font = Enum.Font.GothamBold
+FlyBtn.TextSize = 13
+FlyBtn.AutoButtonColor = false
+FlyBtn.Active = true
+FlyBtn.ZIndex = 5
+FlyBtn.Parent = BFFrame
+
+local FBC = Instance.new("UICorner")
+FBC.CornerRadius = UDim.new(0, 8)
+FBC.Parent = FlyBtn
+
+local FlyStatus = Instance.new("TextLabel")
+FlyStatus.Size = UDim2.new(1, -12, 0, 16)
+FlyStatus.Position = UDim2.new(0, 6, 1, -22)
+FlyStatus.BackgroundTransparency = 1
+FlyStatus.Text = "OFF | Sàn Y67→Y90 (1y/0.5s)"
+FlyStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
+FlyStatus.Font = Enum.Font.Gotham
+FlyStatus.TextSize = 9
+FlyStatus.ZIndex = 5
+FlyStatus.Parent = BFFrame
+
+-- Toggle Guard
+GuardBtn.MouseButton1Click:Connect(function()
+    bypassGuardActive = not bypassGuardActive
+    if bypassGuardActive then
+        TweenService:Create(GuardBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(48, 209, 88) }):Play()
+        GuardStatus.Text = "ON | Lụm trứng → TP base"
+        GuardStatus.TextColor3 = Color3.fromRGB(48, 209, 88)
+        print("[BypassGuard] BẬT")
+    else
+        TweenService:Create(GuardBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(255, 150, 60) }):Play()
+        GuardStatus.Text = "OFF | Lụm trứng → TP base"
+        GuardStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
+        print("[BypassGuard] TẮT")
+    end
+end)
+
+-- Toggle Fly
+FlyBtn.MouseButton1Click:Connect(function()
+    flyActive = not flyActive
+    if flyActive then
+        TweenService:Create(FlyBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(0, 150, 255) }):Play()
+        FlyStatus.Text = "ON | Sàn Y67→Y90 (1y/0.5s)"
+        FlyStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
+        print("[Fly] BẬT")
+    else
+        TweenService:Create(FlyBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(255, 150, 60) }):Play()
+        FlyStatus.Text = "OFF | Sàn Y67→Y90 (1y/0.5s)"
+        FlyStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
+        cleanupFly()
+        print("[Fly] TẮT - xóa sàn")
+    end
+end)
+
+-- Kéo thả (vùng status Fly)
+local bfDragging, bfDragStart, bfStartPos
+BFFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        local relY = input.Position.Y - BFFrame.AbsolutePosition.Y
+        if relY > 120 then
+            bfDragging = true
+            bfDragStart = input.Position
+            bfStartPos = BFFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then bfDragging = false end
+            end)
+        end
+    end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+    if bfDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - bfDragStart
+        BFFrame.Position = UDim2.new(bfStartPos.X.Scale, bfStartPos.X.Offset + delta.X, bfStartPos.Y.Scale, bfStartPos.Y.Offset + delta.Y)
     end
 end)
 
@@ -460,7 +560,6 @@ local godModeEnabled = false
 local function toggleGodMode(state)
     local character = LocalPlayer.Character
     if not character then return end
-
     if state then
         for _, tool in ipairs(character:GetChildren()) do
             if tool:IsA("Tool") then tool.Parent = LocalPlayer.Backpack end
@@ -468,16 +567,13 @@ local function toggleGodMode(state)
         local humanoid = character:FindFirstChildOfClass("Humanoid")
         local rootPart = character:FindFirstChild("HumanoidRootPart")
         if not humanoid or not rootPart then return end
-
         local currentCFrame = rootPart.CFrame
         local newHumanoid = humanoid:Clone()
         newHumanoid.Parent = character
         humanoid:Destroy()
-
         LocalPlayer.Character = nil
         LocalPlayer.Character = character
         workspace.CurrentCamera.CameraSubject = newHumanoid
-
         task.defer(function()
             if rootPart then rootPart.CFrame = currentCFrame end
         end)
@@ -578,7 +674,6 @@ local function startAntiKnockback(char, hum, hrp)
     if knockbackRunning then return end
     knockbackRunning = true
     lastStableCFrame = hrp.CFrame
-
     knockbackConn = RunService.Heartbeat:Connect(function()
         if not char or not char.Parent then
             if knockbackConn then knockbackConn:Disconnect() knockbackConn = nil end
@@ -588,12 +683,10 @@ local function startAntiKnockback(char, hum, hrp)
         local cHrp = char:FindFirstChild("HumanoidRootPart")
         local cHum = char:FindFirstChildOfClass("Humanoid")
         if not cHrp or not cHum then return end
-
         cHrp.AssemblyLinearVelocity = Vector3.zero
         cHrp.AssemblyAngularVelocity = Vector3.zero
         cHrp.Velocity = Vector3.zero
         cHrp.RotVelocity = Vector3.zero
-
         if lastStableCFrame then
             local dist = (cHrp.Position - lastStableCFrame.Position).Magnitude
             if dist > 5 then
@@ -601,14 +694,12 @@ local function startAntiKnockback(char, hum, hrp)
                 cHrp.CFrame = CFrame.new(pos, pos + lastStableCFrame.LookVector)
             end
         end
-
         pcall(function()
             cHum:ChangeState(Enum.HumanoidStateType.Running)
             cHum.PlatformStand = false
             cHum.Sit = false
             cHum.AutoRotate = true
         end)
-
         for _, motor in ipairs(char:GetDescendants()) do
             if motor:IsA("Motor6D") and not motor.Enabled then motor.Enabled = true end
         end
@@ -629,7 +720,6 @@ local function setupCharacter(char)
         hum:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
         hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
         hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
-
         hum.StateChanged:Connect(function(_, newState)
             if not antiStun then return end
             if isBadState(newState) then
@@ -716,14 +806,14 @@ local function disableTrapPart(part)
 end
 
 local function scanTraps()
-    local debris = workspace:FindFirstChild("__DEBRIS")
-    if not debris then return end
-    for _, child in ipairs(debris:GetChildren()) do
-        for _, desc in ipairs(child:GetDescendants()) do
-            if desc:IsA("BasePart") then disableTrapPart(desc) end
-        end
-        if child:IsA("BasePart") then disableTrapPart(child) end
+    local transient = workspace:FindFirstChild("Transient")
+    if not transient then return end
+    local playerTrap = transient:FindFirstChild("PlayerTrap")
+    if not playerTrap then return end
+    for _, obj in ipairs(playerTrap:GetDescendants()) do
+        if obj:IsA("BasePart") then disableTrapPart(obj) end
     end
+    if playerTrap:IsA("BasePart") then disableTrapPart(playerTrap) end
 end
 
 task.spawn(function()
@@ -825,14 +915,11 @@ task.spawn(function()
         local char = LocalPlayer.Character
         local humanoid = char and char:FindFirstChildOfClass("Humanoid")
         if not humanoid or humanoid.Health <= 0 then task.wait(0.3) continue end
-
         local tools = collectAutoBatTools()
         if #tools == 0 then task.wait(0.4) continue end
         if currentIndex > #tools then currentIndex = 1 end
-
         local targetTool = tools[currentIndex]
         if not targetTool or not targetTool.Parent then currentIndex = 1 task.wait(0.1) continue end
-
         if os.clock() - lastSwapTime >= SWAP_INTERVAL then
             lastSwapTime = os.clock()
             if targetTool.Parent ~= char then
@@ -842,7 +929,6 @@ task.spawn(function()
             currentIndex = currentIndex + 1
             if currentIndex > #tools then currentIndex = 1 end
         end
-
         local equippedTool = nil
         for _, t in ipairs(char:GetChildren()) do
             if t:IsA("Tool") and (t.Name == "The Scrambler [X1]" or t:FindFirstChild("HitAnim")) then
@@ -852,165 +938,6 @@ task.spawn(function()
         end
         if equippedTool then pcall(function() fireAutoBatM1(equippedTool) end) end
         RunService.Heartbeat:Wait()
-    end
-end)
-
--- =================================================================
--- SPEED CARRY GUI (ẩn mặc định)
--- =================================================================
-local speedCarryGui = Instance.new("ScreenGui")
-speedCarryGui.Name = "SpeedCarryGUI"
-speedCarryGui.ResetOnSpawn = false
-if gethui then speedCarryGui.Parent = gethui() else speedCarryGui.Parent = CoreGui end
-
-local SCFrame = Instance.new("Frame")
-SCFrame.Name = "SpeedCarryFrame"
-SCFrame.Size = UDim2.new(0, 280, 0, 130)
-SCFrame.Position = UDim2.new(0, 20, 0.5, -65)
-SCFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-SCFrame.BorderSizePixel = 0
-SCFrame.Visible = false
-SCFrame.Parent = speedCarryGui
-
-local SC_FC = Instance.new("UICorner")
-SC_FC.CornerRadius = UDim.new(0, 12)
-SC_FC.Parent = SCFrame
-
-local SC_FS = Instance.new("UIStroke")
-SC_FS.Thickness = 2
-SC_FS.Color = Color3.fromRGB(100, 200, 255)
-SC_FS.Parent = SCFrame
-
-local SCToggle = Instance.new("TextButton")
-SCToggle.Size = UDim2.new(1, -12, 0, 44)
-SCToggle.Position = UDim2.new(0, 6, 0, 6)
-SCToggle.BackgroundColor3 = Color3.fromRGB(48, 209, 88)
-SCToggle.Text = "SPEED CARRY [V]"
-SCToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
-SCToggle.Font = Enum.Font.GothamBold
-SCToggle.TextSize = 13
-SCToggle.AutoButtonColor = false
-SCToggle.Parent = SCFrame
-
-local SC_BC = Instance.new("UICorner")
-SC_BC.CornerRadius = UDim.new(0, 8)
-SC_BC.Parent = SCToggle
-
-local SCForce = Instance.new("TextButton")
-SCForce.Size = UDim2.new(1, -12, 0, 30)
-SCForce.Position = UDim2.new(0, 6, 0, 54)
-SCForce.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
-SCForce.Text = "FORCE BYPASS"
-SCForce.TextColor3 = Color3.fromRGB(255, 255, 255)
-SCForce.Font = Enum.Font.GothamBold
-SCForce.TextSize = 11
-SCForce.AutoButtonColor = false
-SCForce.Parent = SCFrame
-
-local SC_FBC = Instance.new("UICorner")
-SC_FBC.CornerRadius = UDim.new(0, 8)
-SC_FBC.Parent = SCForce
-
-local SCStatus = Instance.new("TextLabel")
-SCStatus.Size = UDim2.new(1, -12, 0, 16)
-SCStatus.Position = UDim2.new(0, 6, 1, -60)
-SCStatus.BackgroundTransparency = 1
-SCStatus.Text = "OFF"
-SCStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
-SCStatus.Font = Enum.Font.GothamBold
-SCStatus.TextSize = 10
-SCStatus.Parent = SCFrame
-
-local SCCarry = Instance.new("TextLabel")
-SCCarry.Size = UDim2.new(1, -12, 0, 16)
-SCCarry.Position = UDim2.new(0, 6, 1, -42)
-SCCarry.BackgroundTransparency = 1
-SCCarry.Text = "Chờ cầm trứng..."
-SCCarry.TextColor3 = Color3.fromRGB(150, 200, 255)
-SCCarry.Font = Enum.Font.Gotham
-SCCarry.TextSize = 10
-SCCarry.Parent = SCFrame
-
-local SCInfo = Instance.new("TextLabel")
-SCInfo.Size = UDim2.new(1, -12, 0, 16)
-SCInfo.Position = UDim2.new(0, 6, 1, -24)
-SCInfo.BackgroundTransparency = 1
-SCInfo.Text = "Khóa physics 2s + Retry x" .. JAIL_MAX_RETRY
-SCInfo.TextColor3 = Color3.fromRGB(255, 220, 150)
-SCInfo.Font = Enum.Font.Gotham
-SCInfo.TextSize = 9
-SCInfo.Parent = SCFrame
-
-local SCWarn = Instance.new("TextLabel")
-SCWarn.Size = UDim2.new(1, -12, 0, 14)
-SCWarn.Position = UDim2.new(0, 6, 1, -8)
-SCWarn.BackgroundTransparency = 1
-SCWarn.Text = "Tự mở khóa sau 2s"
-SCWarn.TextColor3 = Color3.fromRGB(255, 150, 100)
-SCWarn.Font = Enum.Font.Gotham
-SCWarn.TextSize = 8
-SCWarn.Parent = SCFrame
-
-task.spawn(function()
-    while true do
-        task.wait(0.3)
-        if jailBypassRunning then
-            SCCarry.Text = "ĐANG BYPASS..."
-            SCCarry.TextColor3 = Color3.fromRGB(255, 200, 100)
-        elseif jailIsCarrying then
-            SCCarry.Text = "ĐANG CẦM TRỨNG"
-            SCCarry.TextColor3 = Color3.fromRGB(48, 209, 88)
-        else
-            SCCarry.Text = "Chờ cầm trứng..."
-            SCCarry.TextColor3 = Color3.fromRGB(150, 200, 255)
-        end
-    end
-end)
-
-SCToggle.MouseButton1Click:Connect(function()
-    jailBypassActive = not jailBypassActive
-    if jailBypassActive then
-        SCToggle.Text = "ĐANG BẬT [V]"
-        SCToggle.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-        SCStatus.Text = "ON - Khóa physics 2s"
-        SCStatus.TextColor3 = Color3.fromRGB(48, 209, 88)
-    else
-        SCToggle.Text = "SPEED CARRY [V]"
-        SCToggle.BackgroundColor3 = Color3.fromRGB(48, 209, 88)
-        SCStatus.Text = "OFF"
-        SCStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
-        jailUnlockCamera()
-        jailRestorePhysics(LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid"))
-    end
-end)
-
-SCForce.MouseButton1Click:Connect(function()
-    task.spawn(jailSpeedCarryBypass)
-end)
-
-UserInputService.InputBegan:Connect(function(input, gpe)
-    if gpe then return end
-    if input.KeyCode == Enum.KeyCode.V and SCFrame.Visible then
-        SCToggle.MouseButton1Click:Fire()
-    end
-end)
-
-local scDragging, scDragStart, scStartPos
-SCFrame.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        scDragging = true
-        scDragStart = input.Position
-        scStartPos = SCFrame.Position
-        input.Changed:Connect(function()
-            if input.UserInputState == Enum.UserInputState.End then scDragging = false end
-        end)
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if scDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-        local delta = input.Position - scDragStart
-        SCFrame.Position = UDim2.new(scStartPos.X.Scale, scStartPos.X.Offset + delta.X, scStartPos.Y.Scale, scStartPos.Y.Offset + delta.Y)
     end
 end)
 
@@ -1052,7 +979,7 @@ function iOS26Glass:CreateWindow(titleText)
     local originalSize = UDim2.new(0, 522, 0, 324)
     local openPosition = UDim2.new(0.5, -261, 0.09, 0)
     local islandSize = UDim2.new(0, 160, 0, 34)
-    local islandPosition = UDim2.new(0.5, -80, 0.05, 0)
+    local islandPosition = UDim2.new(0.5, -80, 0.09, 0)
 
     local isMinimized = false
     local isAnimating = false
@@ -1244,8 +1171,7 @@ function iOS26Glass:CreateWindow(titleText)
 
         local dotTween = TweenService:Create(MainFrame,
             TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-            { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0.5, -9, 0.05, 0) })
-
+            { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0.5, -9, 0.09, 0) })
         TweenService:Create(MainCorner, TweenInfo.new(0.25), { CornerRadius = UDim.new(1, 0) }):Play()
         dotTween:Play()
         dotTween.Completed:Wait()
@@ -1253,7 +1179,6 @@ function iOS26Glass:CreateWindow(titleText)
         local expandIsland = TweenService:Create(MainFrame,
             TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
             { Size = islandSize, Position = islandPosition })
-
         expandIsland:Play()
         expandIsland.Completed:Wait()
 
@@ -1269,15 +1194,13 @@ function iOS26Glass:CreateWindow(titleText)
 
         local swellTween = TweenService:Create(MainFrame,
             TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-            { Size = UDim2.new(0, 176, 0, 44), Position = UDim2.new(0.5, -88, 0.05, 0) })
-
+            { Size = UDim2.new(0, 176, 0, 44), Position = UDim2.new(0.5, -88, 0.09, 0) })
         swellTween:Play()
         swellTween.Completed:Wait()
 
         local menuTween = TweenService:Create(MainFrame,
             TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
             { Size = originalSize, Position = openPosition })
-
         TweenService:Create(MainCorner, TweenInfo.new(0.35), { CornerRadius = UDim.new(0, 22) }):Play()
         menuTween:Play()
         menuTween.Completed:Wait()
@@ -1656,15 +1579,13 @@ local MiscTab   = Library:AddTab("Misc")
 
 -- =================================================================
 -- TAB MAIN
--- ⭐ Anti Kẻ Giam Giữ ĐẦU TIÊN
 -- =================================================================
-MainTab:AddToggle("Anti Kẻ Giam Giữ", false, function(val)
-    SCFrame.Visible = val
-    if not val then
-        -- Tắt menu: chỉ ẩn, không hủy chức năng
-        print("[JailBypass] Ẩn menu Speed Carry")
+MainTab:AddToggle("Bypass Guard/Fly", false, function(val)
+    BFFrame.Visible = val
+    if val then
+        print("[BypassGuard/Fly] Hiện menu")
     else
-        print("[JailBypass] Hiện menu Speed Carry")
+        print("[BypassGuard/Fly] Ẩn menu")
     end
 end)
 
@@ -1819,10 +1740,111 @@ MiscTab:AddToggle("Hide Map", false, function(state)
     setBuildHidden(state)
 end)
 
+-- DELETE MAP - workspace.World.Build
+local deleteMapActive = false
+local deleteMapLoopThread = nil
+
+local function runDeleteMapLogic()
+    pcall(function()
+        if getgenv().DynamicFloorCleanup then getgenv().DynamicFloorCleanup() end
+
+        local floorPart, wallLeft, wallRight, wallFolder = nil, nil, nil, nil
+        local heartbeatConnection = nil
+        local isEnabled = false
+
+        local function destroyBuildMap()
+            pcall(function()
+                local world = workspace:FindFirstChild("World")
+                if world and world:FindFirstChild("Build") then
+                    world.Build:Destroy()
+                end
+            end)
+        end
+
+        local function cleanup()
+            isEnabled = false
+            if heartbeatConnection then heartbeatConnection:Disconnect() heartbeatConnection = nil end
+            if floorPart then floorPart:Destroy() floorPart = nil end
+            if wallLeft then wallLeft:Destroy() wallLeft = nil end
+            if wallRight then wallRight:Destroy() wallRight = nil end
+            if wallFolder then wallFolder:Destroy() wallFolder = nil end
+        end
+        getgenv().DynamicFloorCleanup = cleanup
+
+        local function enableSystem()
+            cleanup()
+            isEnabled = true
+            destroyBuildMap()
+
+            wallFolder = Instance.new("Folder")
+            wallFolder.Name = "Dynamic_200Stud_System"
+            wallFolder.Parent = workspace
+
+            floorPart = Instance.new("Part")
+            floorPart.Size = Vector3.new(200, 10, 200)
+            floorPart.CanCollide = true
+            floorPart.Anchored = true
+            floorPart.Transparency = 1
+            floorPart.Parent = wallFolder
+
+            wallLeft = Instance.new("Part")
+            wallLeft.Size = Vector3.new(200, 52, 10)
+            wallLeft.CanCollide = true
+            wallLeft.Anchored = true
+            wallLeft.Transparency = 1
+            wallLeft.Parent = wallFolder
+
+            wallRight = Instance.new("Part")
+            wallRight.Size = Vector3.new(200, 52, 10)
+            wallRight.CanCollide = true
+            wallRight.Anchored = true
+            wallRight.Transparency = 1
+            wallRight.Parent = wallFolder
+
+            heartbeatConnection = RunService.Heartbeat:Connect(function()
+                pcall(function()
+                    local char = LocalPlayer.Character
+                    if not char then return end
+                    local hrp = char:FindFirstChild("HumanoidRootPart")
+                    if hrp and isEnabled then
+                        local charX, charZ = hrp.Position.X, hrp.Position.Z
+                        if floorPart and floorPart.Parent then floorPart.CFrame = CFrame.new(charX, 63, charZ) end
+                        if charX < 549 then
+                            if wallLeft and wallLeft.Parent then wallLeft.CFrame = CFrame.new(charX, -500, -433) end
+                            if wallRight and wallRight.Parent then wallRight.CFrame = CFrame.new(charX, -500, -295.5) end
+                        else
+                            if wallLeft and wallLeft.Parent then wallLeft.CFrame = CFrame.new(charX, 94, -433) end
+                            if wallRight and wallRight.Parent then wallRight.CFrame = CFrame.new(charX, 94, -295.5) end
+                        end
+                    end
+                end)
+            end)
+        end
+
+        enableSystem()
+    end)
+end
+
+MiscTab:AddToggle("Delete Map", false, function(state)
+    deleteMapActive = state
+    if state then
+        runDeleteMapLogic()
+        deleteMapLoopThread = task.spawn(function()
+            while deleteMapActive do
+                task.wait(300)
+                if deleteMapActive then runDeleteMapLogic() end
+            end
+        end)
+    else
+        if deleteMapLoopThread then task.cancel(deleteMapLoopThread) deleteMapLoopThread = nil end
+        if getgenv().DynamicFloorCleanup then getgenv().DynamicFloorCleanup() end
+    end
+end)
+
 MiscTab:AddButton("Server NhiiiX-HopSV", function()
     pcall(function()
         loadstring(game:HttpGet("https://raw.githubusercontent.com/Nhoiii/NhoiiiX-Hub-Dev/refs/heads/main/NhoiiiHopSv.lua"))()
     end)
 end)
 
-print("[DragonNova] Loaded | Menu 9% | Mini Arena 9% | Arena OFF | Anti Jail")
+print("[DragonNova] Loaded | Tab Main: Bypass Guard/Fly | Menu 9% | Arena OFF")
