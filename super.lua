@@ -1,4 +1,4 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub) + VIP + AlignPosition Fly
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub) + VIP + BodyPosition Fly
 
 local iOS26Glass = {}
 
@@ -43,10 +43,9 @@ local FLY_FOLDER_NAME = "Fly"
 local JAIL_HOLD_TIME = 0.2
 local jailTpRunning = false
 
--- ⭐ AlignPosition + flyRiseFast
-local flyAlign = nil
-local flyAttach0 = nil
-local flyAttach1 = nil
+-- ⭐ BodyPosition Y-only (player tự do di chuyển X/Z)
+local flyBodyPos = nil
+local flyRiseThread = nil
 local flyFastRise = false
 local CAM_LOCK_TIME = 0.3
 
@@ -67,14 +66,13 @@ RunService.Heartbeat:Connect(function(deltaTime)
 end)
 
 -- =================================================================
--- MINI ARENA - Ở 1% MÀN HÌNH
+-- MINI ARENA
 -- =================================================================
 local MiniGui = Instance.new("ScreenGui")
 MiniGui.Name = "iOS26_MiniArenaGui"
 if gethui then MiniGui.Parent = gethui() else MiniGui.Parent = CoreGui end
 
 local ArenaContainer = Instance.new("Frame")
-ArenaContainer.Name = "ArenaContainer"
 ArenaContainer.Size = UDim2.new(0, 180, 0, 85)
 ArenaContainer.AnchorPoint = Vector2.new(1, 0)
 ArenaContainer.Position = UDim2.new(1, -20, 0.01, 0)
@@ -101,21 +99,16 @@ local miniButtonObjects = {}
 
 local function stopTeleport()
     activeTeleportToken = activeTeleportToken + 1
-    if activeTween then
-        activeTween:Cancel()
-        activeTween = nil
-    end
+    if activeTween then activeTween:Cancel() activeTween = nil end
 end
 
 local function startMovement(targetCF, sourceBtn)
     stopTeleport()
     local currentToken = activeTeleportToken
-
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp or not targetCF then return end
-
     local distance = (targetCF.Position - hrp.Position).Magnitude
 
     if moveMode == "Teleport" then
@@ -136,9 +129,7 @@ local function startMovement(targetCF, sourceBtn)
                                 activeTeleportToken = 0
                                 if sourceBtn and miniStrokes[sourceBtn] then
                                     buttonStates[sourceBtn] = false
-                                    TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
-                                        Color = Color3.fromRGB(255, 255, 255)
-                                    }):Play()
+                                    TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), { Color = Color3.fromRGB(255, 255, 255) }):Play()
                                 end
                             end
                         end
@@ -155,9 +146,7 @@ local function startMovement(targetCF, sourceBtn)
         activeTween.Completed:Connect(function()
             if sourceBtn and miniStrokes[sourceBtn] then
                 buttonStates[sourceBtn] = false
-                TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), {
-                    Color = Color3.fromRGB(255, 255, 255)
-                }):Play()
+                TweenService:Create(miniStrokes[sourceBtn], TweenInfo.new(0.2), { Color = Color3.fromRGB(255, 255, 255) }):Play()
             end
             activeTween = nil
         end)
@@ -169,14 +158,10 @@ local function triggerMiniButtonByName(idName)
     if not obj then return end
     for otherBtn, otherStroke in pairs(miniStrokes) do
         buttonStates[otherBtn] = false
-        TweenService:Create(otherStroke, TweenInfo.new(0.2), {
-            Color = Color3.fromRGB(255, 255, 255)
-        }):Play()
+        TweenService:Create(otherStroke, TweenInfo.new(0.2), { Color = Color3.fromRGB(255, 255, 255) }):Play()
     end
     buttonStates[obj.btn] = true
-    TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
-        Color = Color3.fromRGB(48, 209, 88)
-    }):Play()
+    TweenService:Create(obj.stroke, TweenInfo.new(0.2), { Color = Color3.fromRGB(48, 209, 88) }):Play()
     startMovement(obj.data.xyz, obj.btn)
 end
 
@@ -191,10 +176,7 @@ for _, data in ipairs(miniButtonsData) do
     btn.AutoButtonColor = false
     btn.Visible = false
     btn.Parent = ArenaContainer
-
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(1, 0)
-    corner.Parent = btn
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
 
     local stroke = Instance.new("UIStroke")
     stroke.Thickness = 2
@@ -211,20 +193,14 @@ for _, data in ipairs(miniButtonsData) do
         local isON = not buttonStates[btn]
         for otherBtn, otherStroke in pairs(miniStrokes) do
             buttonStates[otherBtn] = false
-            TweenService:Create(otherStroke, TweenInfo.new(0.2), {
-                Color = Color3.fromRGB(255, 255, 255)
-            }):Play()
+            TweenService:Create(otherStroke, TweenInfo.new(0.2), { Color = Color3.fromRGB(255, 255, 255) }):Play()
         end
         buttonStates[btn] = isON
         if isON then
-            TweenService:Create(stroke, TweenInfo.new(0.2), {
-                Color = Color3.fromRGB(48, 209, 88)
-            }):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.2), { Color = Color3.fromRGB(48, 209, 88) }):Play()
             startMovement(data.xyz, btn)
         else
-            TweenService:Create(stroke, TweenInfo.new(0.2), {
-                Color = Color3.fromRGB(255, 255, 255)
-            }):Play()
+            TweenService:Create(stroke, TweenInfo.new(0.2), { Color = Color3.fromRGB(255, 255, 255) }):Play()
             stopTeleport()
         end
     end)
@@ -245,7 +221,7 @@ end
 local EggCarryRE = findRemote("FieldEggCarry", "RemoteEvent")
 
 -- =================================================================
--- TELEPORT BASE + LOCK CAMERA 0.3s
+-- TELEPORT BASE + LOCK CAMERA
 -- =================================================================
 local function teleportToBase()
     if jailTpRunning then return end
@@ -255,7 +231,6 @@ local function teleportToBase()
     if not char then jailTpRunning = false return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then jailTpRunning = false return end
-
     local cam = workspace.CurrentCamera
     if not cam then jailTpRunning = false return end
 
@@ -265,9 +240,7 @@ local function teleportToBase()
     cam.CFrame = savedCFrame
 
     local lockConn = RunService.RenderStepped:Connect(function()
-        if cam then
-            cam.CFrame = savedCFrame
-        end
+        if cam then cam.CFrame = savedCFrame end
     end)
 
     hrp.CFrame = baseCFrame
@@ -294,13 +267,12 @@ local function teleportToBase()
 
     if lockConn then lockConn:Disconnect() end
     if cam then cam.CameraType = savedType end
-
     print("[BypassGuard] TP base + lock cam xong")
     jailTpRunning = false
 end
 
 -- =================================================================
--- FLY (AlignPosition - không gán CFrame nhân vật)
+-- FLY (BodyPosition Y-only - player tự do X/Z)
 -- =================================================================
 local function createFlyFolder()
     if flyFolder and flyFolder.Parent then flyFolder:Destroy() end
@@ -311,67 +283,47 @@ local function createFlyFolder()
 end
 
 local function detachCharFromPlatform()
-    if flyAlign then flyAlign:Destroy() flyAlign = nil end
-    if flyAttach0 then flyAttach0:Destroy() flyAttach0 = nil end
-    if flyAttach1 then flyAttach1:Destroy() flyAttach1 = nil end
+    if flyBodyPos then flyBodyPos:Destroy() flyBodyPos = nil end
+    if flyRiseThread then task.cancel(flyRiseThread) flyRiseThread = nil end
 end
 
 local function attachCharToPlatform()
-    if flyAlign and flyAlign.Parent then return end
-    if not flyPlatform or not flyPlatform.Parent then return end
-
+    if flyBodyPos and flyBodyPos.Parent then return end
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then return end
 
-    flyAttach0 = Instance.new("Attachment")
-    flyAttach0.Name = "FlyAttachHRP"
-    flyAttach0.Position = Vector3.new(0, 0, 0)
-    flyAttach0.Parent = hrp
+    flyBodyPos = Instance.new("BodyPosition")
+    flyBodyPos.MaxForce = Vector3.new(0, 500000, 0)
+    flyBodyPos.P = 8000
+    flyBodyPos.D = 600
+    flyBodyPos.Position = Vector3.new(hrp.Position.X, flyCurrentY + 3, hrp.Position.Z)
+    flyBodyPos.Parent = hrp
 
-    flyAttach1 = Instance.new("Attachment")
-    flyAttach1.Name = "FlyAttachPlatform"
-    flyAttach1.Position = Vector3.new(0, 3, 0)
-    flyAttach1.Parent = flyPlatform
-
-    flyAlign = Instance.new("AlignPosition")
-    flyAlign.Mode = Enum.PositionAlignmentMode.TwoAttachment
-    flyAlign.Attachment0 = flyAttach0
-    flyAlign.Attachment1 = flyAttach1
-    flyAlign.MaxForce = 500000
-    flyAlign.Responsiveness = 200
-    flyAlign.ApplyAtCenterOfMass = true
-    flyAlign.Parent = hrp
-
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        hum.PlatformStand = false
-        hum.AutoRotate = true
-    end
+    task.spawn(function()
+        while flyBodyPos and flyBodyPos.Parent do
+            RunService.Heartbeat:Wait()
+            local c = LocalPlayer.Character
+            if not c then break end
+            local h = c:FindFirstChild("HumanoidRootPart")
+            if not h then break end
+            flyBodyPos.Position = Vector3.new(h.Position.X, flyCurrentY + 3, h.Position.Z)
+        end
+    end)
 end
 
 local function cleanupFly()
     detachCharFromPlatform()
-    if flyThread then
-        task.cancel(flyThread)
-        flyThread = nil
-    end
-    if flyPlatform then
-        flyPlatform:Destroy()
-        flyPlatform = nil
-    end
-    if flyFolder then
-        flyFolder:Destroy()
-        flyFolder = nil
-    end
+    if flyThread then task.cancel(flyThread) flyThread = nil end
+    if flyPlatform then flyPlatform:Destroy() flyPlatform = nil end
+    if flyFolder then flyFolder:Destroy() flyFolder = nil end
     flyCurrentY = FLY_START_Y
     flyFastRise = false
 end
 
 local function startFlyPlatform()
     if flyPlatform and flyPlatform.Parent then return end
-
     local char = LocalPlayer.Character
     if not char then return end
     local hrp = char:FindFirstChild("HumanoidRootPart")
@@ -407,22 +359,9 @@ local function startFlyPlatform()
             end
         end
     end)
-
-    -- Vòng lặp chậm 1y/0.5s (tắt khi fast rise)
-    task.spawn(function()
-        while flyPlatform and flyPlatform.Parent do
-            task.wait(0.5)
-            if flyPlatform and flyPlatform.Parent and not flyFastRise then
-                if flyCurrentY < FLY_END_Y then
-                    flyCurrentY = flyCurrentY + 1
-                    if flyCurrentY > FLY_END_Y then flyCurrentY = FLY_END_Y end
-                end
-            end
-        end
-    end)
 end
 
--- ⭐ Rise nhanh Y70→Y90
+-- ⭐ Rise 5y/s khi carry
 local function flyRiseFast()
     if not flyPlatform or not flyPlatform.Parent then return end
     if flyFastRise then return end
@@ -431,8 +370,8 @@ local function flyRiseFast()
     attachCharToPlatform()
 
     task.spawn(function()
-        local stepSize = 3
-        local stepWait = 0.03
+        local stepSize = 0.25
+        local stepWait = 0.05
         local target = FLY_END_Y
         while flyPlatform and flyPlatform.Parent and flyCurrentY < target do
             flyCurrentY = math.min(flyCurrentY + stepSize, target)
@@ -445,7 +384,7 @@ local function flyRiseFast()
             end
             task.wait(stepWait)
         end
-        print("[Fly] Fast rise xong → Y = " .. flyCurrentY)
+        print("[Fly] Rise xong → Y = " .. flyCurrentY)
         flyFastRise = false
     end)
 end
@@ -507,7 +446,7 @@ local GuardStatus = Instance.new("TextLabel")
 GuardStatus.Size = UDim2.new(1, -8, 0, 12)
 GuardStatus.Position = UDim2.new(0, 4, 0, 38)
 GuardStatus.BackgroundTransparency = 1
-GuardStatus.Text = "OFF | Carry → TP base"
+GuardStatus.Text = "OFF | Carry → TP base + lock cam"
 GuardStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
 GuardStatus.Font = Enum.Font.Gotham
 GuardStatus.TextSize = 9
@@ -530,7 +469,7 @@ local FlyStatus = Instance.new("TextLabel")
 FlyStatus.Size = UDim2.new(1, -8, 0, 12)
 FlyStatus.Position = UDim2.new(0, 4, 0, 88)
 FlyStatus.BackgroundTransparency = 1
-FlyStatus.Text = "OFF | Rise nhanh khi carry"
+FlyStatus.Text = "OFF | Rise 5y/s khi carry"
 FlyStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
 FlyStatus.Font = Enum.Font.Gotham
 FlyStatus.TextSize = 9
@@ -541,11 +480,11 @@ GuardBtn.MouseButton1Click:Connect(function()
     bypassGuardActive = not bypassGuardActive
     if bypassGuardActive then
         TweenService:Create(GuardBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(48, 209, 88) }):Play()
-        GuardStatus.Text = "ON | Carry → TP base"
+        GuardStatus.Text = "ON | Carry → TP base + lock cam"
         GuardStatus.TextColor3 = Color3.fromRGB(48, 209, 88)
     else
         TweenService:Create(GuardBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(255, 150, 60) }):Play()
-        GuardStatus.Text = "OFF | Carry → TP base"
+        GuardStatus.Text = "OFF | Carry → TP base + lock cam"
         GuardStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
     end
 end)
@@ -554,11 +493,11 @@ FlyBtn.MouseButton1Click:Connect(function()
     flyActive = not flyActive
     if flyActive then
         TweenService:Create(FlyBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(0, 150, 255) }):Play()
-        FlyStatus.Text = "ON | Rise nhanh khi carry"
+        FlyStatus.Text = "ON | Rise 5y/s khi carry"
         FlyStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
     else
         TweenService:Create(FlyBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(255, 150, 60) }):Play()
-        FlyStatus.Text = "OFF | Rise nhanh khi carry"
+        FlyStatus.Text = "OFF | Rise 5y/s khi carry"
         FlyStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
         cleanupFly()
     end
@@ -583,7 +522,7 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 -- =================================================================
--- ⭐ PANEL STEAL EGG VIP
+-- PANEL STEAL EGG VIP
 -- =================================================================
 local MUTATION_COLORS_VIP = {
     ["Golden"]=Color3.fromRGB(255,215,0),["Gold"]=Color3.fromRGB(255,215,0),
@@ -1551,9 +1490,7 @@ ProximityPromptService.PromptHidden:Connect(function(prompt)
 end)
 
 workspace.DescendantAdded:Connect(function(descendant)
-    if descendant:IsA("ProximityPrompt") then
-        bypassPrompt(descendant, 25)
-    end
+    if descendant:IsA("ProximityPrompt") then bypassPrompt(descendant, 25) end
 end)
 
 task.spawn(function()
@@ -1718,9 +1655,7 @@ local function disableTrapPart(part)
         part.CanTouch = false
         part.CanCollide = false
         part.CanQuery = false
-        if string.lower(part.Name) == "hitbox" then
-            part.Size = Vector3.new(0.001, 0.001, 0.001)
-        end
+        if string.lower(part.Name) == "hitbox" then part.Size = Vector3.new(0.001, 0.001, 0.001) end
         for _, child in ipairs(part:GetDescendants()) do
             if child:IsA("TouchTransmitter") or child.ClassName == "TouchInterest" then child:Destroy() end
         end
@@ -1914,10 +1849,7 @@ function iOS26Glass:CreateWindow(titleText)
     MainFrame.BackgroundTransparency = 0.78
     MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
-
-    local MainCorner = Instance.new("UICorner")
-    MainCorner.CornerRadius = UDim.new(0, 22)
-    MainCorner.Parent = MainFrame
+    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 22)
 
     local MainStroke = Instance.new("UIStroke")
     MainStroke.Thickness = 1.2
@@ -2076,20 +2008,15 @@ function iOS26Glass:CreateWindow(titleText)
         Sidebar.Visible = false
         ContentContainer.Visible = false
         TopBar.Visible = false
-
-        local dotTween = TweenService:Create(MainFrame,
-            TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        local dotTween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
             { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0.5, -9, 0.01, 0) })
-        TweenService:Create(MainCorner, TweenInfo.new(0.25), { CornerRadius = UDim.new(1, 0) }):Play()
+        TweenService:Create(MainFrame, TweenInfo.new(0.25), { CornerRadius = UDim.new(1, 0) })
         dotTween:Play()
         dotTween.Completed:Wait()
-
-        local expandIsland = TweenService:Create(MainFrame,
-            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        local expandIsland = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
             { Size = islandSize, Position = islandPosition })
         expandIsland:Play()
         expandIsland.Completed:Wait()
-
         IslandLabel.Visible = true
         isMinimized = true
         isAnimating = false
@@ -2099,33 +2026,25 @@ function iOS26Glass:CreateWindow(titleText)
         if isAnimating or not isMinimized then return end
         isAnimating = true
         IslandLabel.Visible = false
-
-        local swellTween = TweenService:Create(MainFrame,
-            TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        local swellTween = TweenService:Create(MainFrame, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
             { Size = UDim2.new(0, 176, 0, 44), Position = UDim2.new(0.5, -88, 0.01, 0) })
         swellTween:Play()
         swellTween.Completed:Wait()
-
-        local menuTween = TweenService:Create(MainFrame,
-            TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+        local menuTween = TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
             { Size = originalSize, Position = openPosition })
-        TweenService:Create(MainCorner, TweenInfo.new(0.35), { CornerRadius = UDim.new(0, 22) }):Play()
+        TweenService:Create(MainFrame, TweenInfo.new(0.35), { CornerRadius = UDim.new(0, 22) }):Play()
         menuTween:Play()
         menuTween.Completed:Wait()
-
         Sidebar.Visible = true
         ContentContainer.Visible = true
         TopBar.Visible = true
-
         isMinimized = false
         isAnimating = false
     end
 
     MinimizeBtn.MouseButton1Click:Connect(minimizeMenu)
     MainFrame.InputBegan:Connect(function(input)
-        if isMinimized and not isAnimating and (
-            input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
-        ) then
+        if isMinimized and not isAnimating and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
             expandMenu()
         end
     end)
@@ -2194,25 +2113,21 @@ function iOS26Glass:CreateWindow(titleText)
             ProfileFrame.BackgroundTransparency = 0.78
             ProfileFrame.Parent = TabContent
             Instance.new("UICorner", ProfileFrame).CornerRadius = UDim.new(0, 10)
-
             local PStroke = Instance.new("UIStroke")
             PStroke.Thickness = 1.5
             PStroke.Color = Color3.fromRGB(255, 255, 255)
             PStroke.Transparency = 0.5
             PStroke.Parent = ProfileFrame
-
             local CircleAvatar = Instance.new("ImageLabel")
             CircleAvatar.Size = UDim2.new(0, 34, 0, 34)
             CircleAvatar.Position = UDim2.new(0, 8, 0.5, -17)
             CircleAvatar.BackgroundTransparency = 1
             CircleAvatar.Parent = ProfileFrame
             Instance.new("UICorner", CircleAvatar).CornerRadius = UDim.new(1, 0)
-
             task.spawn(function()
                 local content, isLoaded = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
                 if isLoaded and content then CircleAvatar.Image = content end
             end)
-
             local N = Instance.new("TextLabel")
             N.Size = UDim2.new(1, -52, 0, 16)
             N.Position = UDim2.new(0, 48, 0, 8)
@@ -2224,7 +2139,6 @@ function iOS26Glass:CreateWindow(titleText)
             N.TextXAlignment = Enum.TextXAlignment.Left
             N.TextTruncate = Enum.TextTruncate.AtEnd
             N.Parent = ProfileFrame
-
             local U = Instance.new("TextLabel")
             U.Size = UDim2.new(1, -52, 0, 14)
             U.Position = UDim2.new(0, 48, 0, 24)
@@ -2250,13 +2164,11 @@ function iOS26Glass:CreateWindow(titleText)
             BtnFrame.AutoButtonColor = false
             BtnFrame.Parent = TabContent
             Instance.new("UICorner", BtnFrame).CornerRadius = UDim.new(0, 10)
-
             local Stroke = Instance.new("UIStroke")
             Stroke.Thickness = 1.5
             Stroke.Color = Color3.fromRGB(255, 255, 255)
             Stroke.Transparency = 0.6
             Stroke.Parent = BtnFrame
-
             BtnFrame.MouseButton1Click:Connect(function()
                 TweenService:Create(BtnFrame, TweenInfo.new(0.08), { BackgroundTransparency = 0.4 }):Play()
                 task.wait(0.08)
@@ -2273,14 +2185,12 @@ function iOS26Glass:CreateWindow(titleText)
             ToggleFrame.BackgroundTransparency = 0.78
             ToggleFrame.Parent = TabContent
             Instance.new("UICorner", ToggleFrame).CornerRadius = UDim.new(0, 10)
-
             local TStroke = Instance.new("UIStroke")
             TStroke.Thickness = 1.5
             TStroke.Color = Color3.fromRGB(255, 255, 255)
             TStroke.Transparency = 0.5
             TStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             TStroke.Parent = ToggleFrame
-
             local Label = Instance.new("TextLabel")
             Label.Size = UDim2.new(1, -65, 1, 0)
             Label.Position = UDim2.new(0, 10, 0, 0)
@@ -2291,7 +2201,6 @@ function iOS26Glass:CreateWindow(titleText)
             Label.TextSize = 11.5
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.Parent = ToggleFrame
-
             local SwitchTrack = Instance.new("Frame")
             SwitchTrack.Size = UDim2.new(0, 44, 0, 24)
             SwitchTrack.AnchorPoint = Vector2.new(1, 0.5)
@@ -2300,7 +2209,6 @@ function iOS26Glass:CreateWindow(titleText)
             SwitchTrack.BackgroundTransparency = toggled and 0.25 or 0.6
             SwitchTrack.Parent = ToggleFrame
             Instance.new("UICorner", SwitchTrack).CornerRadius = UDim.new(1, 0)
-
             local Knob = Instance.new("Frame")
             Knob.AnchorPoint = Vector2.new(0.5, 0.5)
             Knob.Size = UDim2.new(0, 18, 0, 18)
@@ -2309,33 +2217,25 @@ function iOS26Glass:CreateWindow(titleText)
             Knob.BackgroundTransparency = 0.15
             Knob.Parent = SwitchTrack
             Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
-
             local ClickArea = Instance.new("TextButton")
             ClickArea.Size = UDim2.new(1, 0, 1, 0)
             ClickArea.BackgroundTransparency = 1
             ClickArea.Text = ""
             ClickArea.Parent = ToggleFrame
-
             ClickArea.MouseButton1Click:Connect(function()
                 toggled = not toggled
                 local targetPos = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
                 local targetBg = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
                 local targetTrans = toggled and 0.25 or 0.6
-
                 local stretchW, stretchH
-                if toggled then stretchW = 24 stretchH = 14
-                else stretchW = 20 stretchH = 20 end
-
-                TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
-                    Size = UDim2.new(0, stretchW, 0, stretchH), Position = targetPos
-                }):Play()
-                TweenService:Create(SwitchTrack, TweenInfo.new(0.25), {
-                    BackgroundColor3 = targetBg, BackgroundTransparency = targetTrans
-                }):Play()
+                if toggled then stretchW = 24 stretchH = 14 else stretchW = 20 stretchH = 20 end
+                TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                    { Size = UDim2.new(0, stretchW, 0, stretchH), Position = targetPos }):Play()
+                TweenService:Create(SwitchTrack, TweenInfo.new(0.25),
+                    { BackgroundColor3 = targetBg, BackgroundTransparency = targetTrans }):Play()
                 task.wait(0.12)
-                TweenService:Create(Knob, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-                    Size = UDim2.new(0, 18, 0, 18)
-                }):Play()
+                TweenService:Create(Knob, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+                    { Size = UDim2.new(0, 18, 0, 18) }):Play()
                 if callback then callback(toggled) end
             end)
         end
@@ -2349,13 +2249,11 @@ function iOS26Glass:CreateWindow(titleText)
             SliderFrame.BackgroundTransparency = 0.78
             SliderFrame.Parent = TabContent
             Instance.new("UICorner", SliderFrame).CornerRadius = UDim.new(0, 10)
-
             local SStroke = Instance.new("UIStroke")
             SStroke.Thickness = 1
             SStroke.Color = Color3.fromRGB(255, 255, 255)
             SStroke.Transparency = 0.6
             SStroke.Parent = SliderFrame
-
             local Label = Instance.new("TextLabel")
             Label.Size = UDim2.new(1, -60, 0, 16)
             Label.Position = UDim2.new(0, 10, 0, 5)
@@ -2366,7 +2264,6 @@ function iOS26Glass:CreateWindow(titleText)
             Label.TextSize = 11.5
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.Parent = SliderFrame
-
             local ValLabel = Instance.new("TextLabel")
             ValLabel.Size = UDim2.new(0, 40, 0, 16)
             ValLabel.Position = UDim2.new(1, -50, 0, 5)
@@ -2377,7 +2274,6 @@ function iOS26Glass:CreateWindow(titleText)
             ValLabel.TextSize = 11.5
             ValLabel.TextXAlignment = Enum.TextXAlignment.Right
             ValLabel.Parent = SliderFrame
-
             local Track = Instance.new("Frame")
             Track.Size = UDim2.new(1, -20, 0, 7)
             Track.Position = UDim2.new(0, 10, 1, -14)
@@ -2385,14 +2281,12 @@ function iOS26Glass:CreateWindow(titleText)
             Track.BackgroundTransparency = 0.65
             Track.Parent = SliderFrame
             Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
-
             local Fill = Instance.new("Frame")
             Fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
             Fill.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
             Fill.BackgroundTransparency = 0.25
             Fill.Parent = Track
             Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
-
             local Thumb = Instance.new("Frame")
             Thumb.AnchorPoint = Vector2.new(0.5, 0.5)
             Thumb.Size = UDim2.new(0, 14, 0, 14)
@@ -2401,7 +2295,6 @@ function iOS26Glass:CreateWindow(titleText)
             Thumb.BackgroundTransparency = 0.15
             Thumb.Parent = Track
             Instance.new("UICorner", Thumb).CornerRadius = UDim.new(1, 0)
-
             local function update(input)
                 local relativeX = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
                 local newValue = math.floor(min + (max - min) * relativeX)
@@ -2411,7 +2304,6 @@ function iOS26Glass:CreateWindow(titleText)
                 Thumb.Position = UDim2.new(relativeX, 0, 0.5, 0)
                 if callback then callback(value) end
             end
-
             SliderFrame.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = true
@@ -2487,9 +2379,7 @@ for _, data in ipairs(miniButtonsData) do
             if not state and buttonStates[obj.btn] then
                 buttonStates[obj.btn] = false
                 stopTeleport()
-                TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
-                    Color = Color3.fromRGB(255, 255, 255)
-                }):Play()
+                TweenService:Create(obj.stroke, TweenInfo.new(0.2), { Color = Color3.fromRGB(255, 255, 255) }):Play()
             end
         end
     end)
@@ -2625,9 +2515,7 @@ local function runDeleteMapLogic()
         local function destroyBuildMap()
             pcall(function()
                 local world = workspace:FindFirstChild("World")
-                if world and world:FindFirstChild("Build") then
-                    world.Build:Destroy()
-                end
+                if world and world:FindFirstChild("Build") then world.Build:Destroy() end
             end)
         end
         local function cleanup()
@@ -2709,4 +2597,4 @@ MiscTab:AddButton("Server NhiiiX-HopSV", function()
     end)
 end)
 
-print("[DragonNova] Loaded | VIP + AlignPosition Fly + Camera Lock")
+print("[DragonNova] Loaded | VIP + BodyPosition Fly 5y/s + Camera Lock")
