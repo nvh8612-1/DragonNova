@@ -1,4 +1,4 @@
--- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub)
+-- Delta X - iOS 26 Liquid Glass UI (Dragon Nova Hub) + VIP + AlignPosition Fly
 
 local iOS26Glass = {}
 
@@ -31,7 +31,6 @@ local speedVal = 600
 local chunkVal = 12
 local baseCFrame = CFrame.new(519.01, 70.27, -362.74)
 
--- Bypass Guard/Fly
 local bypassGuardActive = false
 local flyActive = false
 local flyFolder = nil
@@ -43,6 +42,13 @@ local FLY_END_Y = 90
 local FLY_FOLDER_NAME = "Fly"
 local JAIL_HOLD_TIME = 0.2
 local jailTpRunning = false
+
+-- ⭐ AlignPosition + flyRiseFast
+local flyAlign = nil
+local flyAttach0 = nil
+local flyAttach1 = nil
+local flyFastRise = false
+local CAM_LOCK_TIME = 0.3
 
 -- LOOP TPWALK
 RunService.Heartbeat:Connect(function(deltaTime)
@@ -225,7 +231,7 @@ for _, data in ipairs(miniButtonsData) do
 end
 
 -- =================================================================
--- BYPASS GUARD / FLY LOGIC
+-- FIND REMOTE
 -- =================================================================
 local function findRemote(keyword, class)
     for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
@@ -238,7 +244,9 @@ end
 
 local EggCarryRE = findRemote("FieldEggCarry", "RemoteEvent")
 
--- Teleport base
+-- =================================================================
+-- TELEPORT BASE + LOCK CAMERA 0.3s
+-- =================================================================
 local function teleportToBase()
     if jailTpRunning then return end
     jailTpRunning = true
@@ -248,14 +256,30 @@ local function teleportToBase()
     local hrp = char:FindFirstChild("HumanoidRootPart")
     if not hrp then jailTpRunning = false return end
 
+    local cam = workspace.CurrentCamera
+    if not cam then jailTpRunning = false return end
+
+    local savedCFrame = cam.CFrame
+    local savedType = cam.CameraType
+    cam.CameraType = Enum.CameraType.Scriptable
+    cam.CFrame = savedCFrame
+
+    local lockConn = RunService.RenderStepped:Connect(function()
+        if cam then
+            cam.CFrame = savedCFrame
+        end
+    end)
+
     hrp.CFrame = baseCFrame
     hrp.AssemblyLinearVelocity = Vector3.zero
     hrp.AssemblyAngularVelocity = Vector3.zero
     hrp.Velocity = Vector3.zero
     hrp.RotVelocity = Vector3.zero
 
-    local startTime = os.clock()
-    while os.clock() - startTime < JAIL_HOLD_TIME do
+    task.wait(CAM_LOCK_TIME)
+
+    local holdStart = os.clock()
+    while os.clock() - holdStart < JAIL_HOLD_TIME do
         RunService.Heartbeat:Wait()
         local c = LocalPlayer.Character
         if c then
@@ -268,11 +292,16 @@ local function teleportToBase()
         end
     end
 
-    print("[BypassGuard] TP base xong")
+    if lockConn then lockConn:Disconnect() end
+    if cam then cam.CameraType = savedType end
+
+    print("[BypassGuard] TP base + lock cam xong")
     jailTpRunning = false
 end
 
--- Fly
+-- =================================================================
+-- FLY (AlignPosition - không gán CFrame nhân vật)
+-- =================================================================
 local function createFlyFolder()
     if flyFolder and flyFolder.Parent then flyFolder:Destroy() end
     flyFolder = Instance.new("Folder")
@@ -281,7 +310,49 @@ local function createFlyFolder()
     return flyFolder
 end
 
+local function detachCharFromPlatform()
+    if flyAlign then flyAlign:Destroy() flyAlign = nil end
+    if flyAttach0 then flyAttach0:Destroy() flyAttach0 = nil end
+    if flyAttach1 then flyAttach1:Destroy() flyAttach1 = nil end
+end
+
+local function attachCharToPlatform()
+    if flyAlign and flyAlign.Parent then return end
+    if not flyPlatform or not flyPlatform.Parent then return end
+
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
+
+    flyAttach0 = Instance.new("Attachment")
+    flyAttach0.Name = "FlyAttachHRP"
+    flyAttach0.Position = Vector3.new(0, 0, 0)
+    flyAttach0.Parent = hrp
+
+    flyAttach1 = Instance.new("Attachment")
+    flyAttach1.Name = "FlyAttachPlatform"
+    flyAttach1.Position = Vector3.new(0, 3, 0)
+    flyAttach1.Parent = flyPlatform
+
+    flyAlign = Instance.new("AlignPosition")
+    flyAlign.Mode = Enum.PositionAlignmentMode.TwoAttachment
+    flyAlign.Attachment0 = flyAttach0
+    flyAlign.Attachment1 = flyAttach1
+    flyAlign.MaxForce = 500000
+    flyAlign.Responsiveness = 200
+    flyAlign.ApplyAtCenterOfMass = true
+    flyAlign.Parent = hrp
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.PlatformStand = false
+        hum.AutoRotate = true
+    end
+end
+
 local function cleanupFly()
+    detachCharFromPlatform()
     if flyThread then
         task.cancel(flyThread)
         flyThread = nil
@@ -295,6 +366,7 @@ local function cleanupFly()
         flyFolder = nil
     end
     flyCurrentY = FLY_START_Y
+    flyFastRise = false
 end
 
 local function startFlyPlatform()
@@ -319,9 +391,8 @@ local function startFlyPlatform()
     flyPlatform.Material = Enum.Material.Neon
     flyPlatform.Parent = flyFolder
 
-    print("[Fly] Sàn tại (" .. math.floor(hrp.Position.X) .. ", " .. FLY_START_Y .. ", " .. math.floor(hrp.Position.Z) .. ")")
+    attachCharToPlatform()
 
-    -- Vòng lặp bám X/Z nhân vật
     flyThread = task.spawn(function()
         while flyPlatform and flyPlatform.Parent do
             RunService.Heartbeat:Wait()
@@ -337,35 +408,66 @@ local function startFlyPlatform()
         end
     end)
 
-    -- Vòng lặp nâng Y: 1 stud mỗi 0.5s
+    -- Vòng lặp chậm 1y/0.5s (tắt khi fast rise)
     task.spawn(function()
         while flyPlatform and flyPlatform.Parent do
             task.wait(0.5)
-            if flyPlatform and flyPlatform.Parent then
+            if flyPlatform and flyPlatform.Parent and not flyFastRise then
                 if flyCurrentY < FLY_END_Y then
                     flyCurrentY = flyCurrentY + 1
                     if flyCurrentY > FLY_END_Y then flyCurrentY = FLY_END_Y end
-                    print("[Fly] Y = " .. flyCurrentY)
                 end
             end
         end
     end)
 end
 
--- Nghe Carry
+-- ⭐ Rise nhanh Y70→Y90
+local function flyRiseFast()
+    if not flyPlatform or not flyPlatform.Parent then return end
+    if flyFastRise then return end
+    flyFastRise = true
+
+    attachCharToPlatform()
+
+    task.spawn(function()
+        local stepSize = 3
+        local stepWait = 0.03
+        local target = FLY_END_Y
+        while flyPlatform and flyPlatform.Parent and flyCurrentY < target do
+            flyCurrentY = math.min(flyCurrentY + stepSize, target)
+            local c = LocalPlayer.Character
+            if c then
+                local h = c:FindFirstChild("HumanoidRootPart")
+                if h then
+                    flyPlatform.Position = Vector3.new(h.Position.X, flyCurrentY, h.Position.Z)
+                end
+            end
+            task.wait(stepWait)
+        end
+        print("[Fly] Fast rise xong → Y = " .. flyCurrentY)
+        flyFastRise = false
+    end)
+end
+
 if EggCarryRE then
     EggCarryRE.OnClientEvent:Connect(function(data)
         if typeof(data) ~= "table" then return end
         if data.IsCarrying == true and data.Uid then
-            print("[Event] Lụm trứng: " .. tostring(data.Uid))
             if bypassGuardActive then task.spawn(teleportToBase) end
-            if flyActive then task.spawn(startFlyPlatform) end
+            if flyActive then
+                if not flyPlatform or not flyPlatform.Parent then
+                    task.spawn(startFlyPlatform)
+                    task.wait(0.1)
+                end
+                flyRiseFast()
+            end
         end
     end)
 end
 
 -- =================================================================
--- BYPASS GUARD / FLY GUI (ẩn mặc định, hiện khi bật toggle Tab Main)
+-- BYPASS GUARD / FLY GUI (180x118)
 -- =================================================================
 local bfGui = Instance.new("ScreenGui")
 bfGui.Name = "BypassFlyGUI"
@@ -373,9 +475,8 @@ bfGui.ResetOnSpawn = false
 if gethui then bfGui.Parent = gethui() else bfGui.Parent = CoreGui end
 
 local BFFrame = Instance.new("TextButton")
-BFFrame.Name = "BFFrame"
-BFFrame.Size = UDim2.new(0, 220, 0, 140)
-BFFrame.Position = UDim2.new(0, 20, 0.5, -70)
+BFFrame.Size = UDim2.new(0, 180, 0, 118)
+BFFrame.Position = UDim2.new(0, 20, 0.5, -59)
 BFFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 BFFrame.BorderSizePixel = 0
 BFFrame.Text = ""
@@ -383,129 +484,952 @@ BFFrame.AutoButtonColor = false
 BFFrame.Active = true
 BFFrame.Visible = false
 BFFrame.Parent = bfGui
-
-local BFFC = Instance.new("UICorner")
-BFFC.CornerRadius = UDim.new(0, 12)
-BFFC.Parent = BFFrame
+Instance.new("UICorner", BFFrame).CornerRadius = UDim.new(0, 8)
 
 local BFFS = Instance.new("UIStroke")
-BFFS.Thickness = 2
+BFFS.Thickness = 1.5
 BFFS.Color = Color3.fromRGB(255, 150, 60)
 BFFS.Parent = BFFrame
 
--- Nút Bypass Guard
 local GuardBtn = Instance.new("TextButton")
-GuardBtn.Name = "GuardBtn"
-GuardBtn.Size = UDim2.new(1, -12, 0, 44)
-GuardBtn.Position = UDim2.new(0, 6, 0, 6)
+GuardBtn.Size = UDim2.new(1, -8, 0, 30)
+GuardBtn.Position = UDim2.new(0, 4, 0, 6)
 GuardBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 60)
 GuardBtn.Text = "BYPASS GUARD"
 GuardBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 GuardBtn.Font = Enum.Font.GothamBold
-GuardBtn.TextSize = 13
+GuardBtn.TextSize = 11
 GuardBtn.AutoButtonColor = false
-GuardBtn.Active = true
-GuardBtn.ZIndex = 5
 GuardBtn.Parent = BFFrame
-
-local GBC = Instance.new("UICorner")
-GBC.CornerRadius = UDim.new(0, 8)
-GBC.Parent = GuardBtn
+Instance.new("UICorner", GuardBtn).CornerRadius = UDim.new(0, 5)
 
 local GuardStatus = Instance.new("TextLabel")
-GuardStatus.Size = UDim2.new(1, -12, 0, 16)
-GuardStatus.Position = UDim2.new(0, 6, 0, 52)
+GuardStatus.Size = UDim2.new(1, -8, 0, 12)
+GuardStatus.Position = UDim2.new(0, 4, 0, 38)
 GuardStatus.BackgroundTransparency = 1
-GuardStatus.Text = "OFF | Lụm trứng → TP base"
+GuardStatus.Text = "OFF | Carry → TP base"
 GuardStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
 GuardStatus.Font = Enum.Font.Gotham
 GuardStatus.TextSize = 9
-GuardStatus.ZIndex = 5
+GuardStatus.TextXAlignment = Enum.TextXAlignment.Left
 GuardStatus.Parent = BFFrame
 
--- Nút Fly
 local FlyBtn = Instance.new("TextButton")
-FlyBtn.Name = "FlyBtn"
-FlyBtn.Size = UDim2.new(1, -12, 0, 44)
-FlyBtn.Position = UDim2.new(0, 6, 0, 74)
+FlyBtn.Size = UDim2.new(1, -8, 0, 30)
+FlyBtn.Position = UDim2.new(0, 4, 0, 56)
 FlyBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 60)
 FlyBtn.Text = "FLY"
 FlyBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 FlyBtn.Font = Enum.Font.GothamBold
-FlyBtn.TextSize = 13
+FlyBtn.TextSize = 11
 FlyBtn.AutoButtonColor = false
-FlyBtn.Active = true
-FlyBtn.ZIndex = 5
 FlyBtn.Parent = BFFrame
-
-local FBC = Instance.new("UICorner")
-FBC.CornerRadius = UDim.new(0, 8)
-FBC.Parent = FlyBtn
+Instance.new("UICorner", FlyBtn).CornerRadius = UDim.new(0, 5)
 
 local FlyStatus = Instance.new("TextLabel")
-FlyStatus.Size = UDim2.new(1, -12, 0, 16)
-FlyStatus.Position = UDim2.new(0, 6, 1, -22)
+FlyStatus.Size = UDim2.new(1, -8, 0, 12)
+FlyStatus.Position = UDim2.new(0, 4, 0, 88)
 FlyStatus.BackgroundTransparency = 1
-FlyStatus.Text = "OFF | Sàn Y67→Y90 (1y/0.5s)"
+FlyStatus.Text = "OFF | Rise nhanh khi carry"
 FlyStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
 FlyStatus.Font = Enum.Font.Gotham
 FlyStatus.TextSize = 9
-FlyStatus.ZIndex = 5
+FlyStatus.TextXAlignment = Enum.TextXAlignment.Left
 FlyStatus.Parent = BFFrame
 
--- Toggle Guard
 GuardBtn.MouseButton1Click:Connect(function()
     bypassGuardActive = not bypassGuardActive
     if bypassGuardActive then
         TweenService:Create(GuardBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(48, 209, 88) }):Play()
-        GuardStatus.Text = "ON | Lụm trứng → TP base"
+        GuardStatus.Text = "ON | Carry → TP base"
         GuardStatus.TextColor3 = Color3.fromRGB(48, 209, 88)
-        print("[BypassGuard] BẬT")
     else
         TweenService:Create(GuardBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(255, 150, 60) }):Play()
-        GuardStatus.Text = "OFF | Lụm trứng → TP base"
+        GuardStatus.Text = "OFF | Carry → TP base"
         GuardStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
-        print("[BypassGuard] TẮT")
     end
 end)
 
--- Toggle Fly
 FlyBtn.MouseButton1Click:Connect(function()
     flyActive = not flyActive
     if flyActive then
         TweenService:Create(FlyBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(0, 150, 255) }):Play()
-        FlyStatus.Text = "ON | Sàn Y67→Y90 (1y/0.5s)"
+        FlyStatus.Text = "ON | Rise nhanh khi carry"
         FlyStatus.TextColor3 = Color3.fromRGB(100, 200, 255)
-        print("[Fly] BẬT")
     else
         TweenService:Create(FlyBtn, TweenInfo.new(0.2), { BackgroundColor3 = Color3.fromRGB(255, 150, 60) }):Play()
-        FlyStatus.Text = "OFF | Sàn Y67→Y90 (1y/0.5s)"
+        FlyStatus.Text = "OFF | Rise nhanh khi carry"
         FlyStatus.TextColor3 = Color3.fromRGB(180, 180, 200)
         cleanupFly()
-        print("[Fly] TẮT - xóa sàn")
     end
 end)
 
--- Kéo thả (vùng status Fly)
 local bfDragging, bfDragStart, bfStartPos
 BFFrame.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        local relY = input.Position.Y - BFFrame.AbsolutePosition.Y
-        if relY > 120 then
-            bfDragging = true
-            bfDragStart = input.Position
-            bfStartPos = BFFrame.Position
-            input.Changed:Connect(function()
-                if input.UserInputState == Enum.UserInputState.End then bfDragging = false end
-            end)
-        end
+        bfDragging = true
+        bfDragStart = input.Position
+        bfStartPos = BFFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then bfDragging = false end
+        end)
     end
 end)
-
 UserInputService.InputChanged:Connect(function(input)
     if bfDragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
         local delta = input.Position - bfDragStart
         BFFrame.Position = UDim2.new(bfStartPos.X.Scale, bfStartPos.X.Offset + delta.X, bfStartPos.Y.Scale, bfStartPos.Y.Offset + delta.Y)
+    end
+end)
+
+-- =================================================================
+-- ⭐ PANEL STEAL EGG VIP
+-- =================================================================
+local MUTATION_COLORS_VIP = {
+    ["Golden"]=Color3.fromRGB(255,215,0),["Gold"]=Color3.fromRGB(255,215,0),
+    ["Silver"]=Color3.fromRGB(192,192,200),["Rainbow"]=Color3.fromRGB(255,100,255),
+    ["Luminous"]=Color3.fromRGB(255,255,200),["Fractured"]=Color3.fromRGB(150,220,255),
+    ["Parasite"]=Color3.fromRGB(180,80,80),["Spirit Bloom"]=Color3.fromRGB(255,180,255),
+    ["Bloom"]=Color3.fromRGB(255,200,220),
+}
+
+local VIP_HOME_POS        = Vector3.new(519, 70, -362.74)
+local VIP_ARRIVE_DIST     = 2.5
+local VIP_HOME_ARRIVE     = 6
+local VIP_MAX_TIME        = 45
+local VIP_SLOW_RADIUS     = 12
+local VIP_MIN_SPEED       = 6
+local VIP_DEFAULT_SPEED   = 16
+local VIP_BRAKE_DIST      = 4
+local VIP_STOP_HOLD_TICKS = 8
+local VIP_STOP_HOLD_WAIT  = 0.02
+local VIP_CARRY_CONFIRM_TIMEOUT = 5
+local VIP_VERIFY_INTERVAL       = 0.15
+local VIP_SNAPSHOT_INTERVAL     = 0.5
+local VIP_TP_OFFSET_Y           = 3
+
+local vipMovementMode = "walk"
+local vipIsRunning = false
+local vipEggList = {}
+local vipCarrySignal = nil
+local vipEggCarrying = false
+local vipIsRagdoll = false
+local vipHeldUid = nil
+local vipNeedRecover = false
+local vipStealingUid = nil
+local vipStealingCategory = nil
+local vipStealingState = nil
+
+local function vipNormalizeState(s)
+    if type(s) ~= "string" then return "" end
+    return s:lower():gsub("%s+", "")
+end
+local function vipClassifyState(stateStr)
+    local s = vipNormalizeState(stateStr)
+    if s == "" then return "unknown" end
+    if s:find("claim", 1, true) then return "claimed" end
+    if s:find("drop", 1, true) then return "dropped" end
+    if s:find("carried", 1, true) or s:find("guardcarry", 1, true) or s == "carry" then return "carried" end
+    if s:find("slot", 1, true) or s:find("available", 1, true) then return "slot" end
+    return "unknown"
+end
+local function vipGetMutations(rec)
+    local r = {}
+    if rec.BaseMutation and rec.BaseMutation ~= "" then r[rec.BaseMutation] = true end
+    if typeof(rec.Mutations) == "table" then
+        for _, m in pairs(rec.Mutations) do
+            if typeof(m) == "string" and m ~= "" then r[m] = true end
+        end
+    end
+    local list = {}
+    for m in pairs(r) do table.insert(list, m) end
+    table.sort(list)
+    return list
+end
+
+local VIP_SnapshotRF = findRemote("AskFieldEggSnapshot", "RemoteFunction")
+local VIP_EggCarryRF = findRemote("AskFieldEggCarry", "RemoteFunction")
+local VIP_EggShiftedRE = findRemote("FieldEggShifted", "RemoteEvent")
+local VIP_EggGoneRE = findRemote("FieldEggGone", "RemoteEvent")
+
+local function vipUpdateEgg(data)
+    if typeof(data) ~= "table" or not data.Uid then return end
+    local e = vipEggList[data.Uid] or {}
+    e.category = data.AssetCategory or data.Category or e.category
+    e.state    = data.State or e.state
+    e.cframe   = data.BoundsCFrame or data.CFrame or e.cframe
+    e.uid      = data.Uid
+    e.area     = data.AreaId or e.area
+    e.slot     = data.NestId or e.slot
+    e.mutations = vipGetMutations(data)
+    vipEggList[data.Uid] = e
+    if data.Uid == vipStealingUid then
+        local cls = vipClassifyState(e.state)
+        if cls ~= vipStealingState then vipStealingState = cls end
+    end
+end
+
+local function vipTakeSnapshot()
+    if not VIP_SnapshotRF then return 0 end
+    local ok, res = pcall(function() return VIP_SnapshotRF:InvokeServer() end)
+    if not ok or typeof(res) ~= "table" then return 0 end
+    local records = res.Records or res.records
+    if typeof(records) ~= "table" then return 0 end
+    local seen = {}
+    local n = 0
+    for _, rec in ipairs(records) do
+        if typeof(rec) == "table" and rec.Uid then
+            seen[rec.Uid] = true
+            vipUpdateEgg(rec)
+            n = n + 1
+        end
+    end
+    for uid in pairs(vipEggList) do
+        if not seen[uid] and uid ~= vipStealingUid then vipEggList[uid] = nil end
+    end
+    return n
+end
+
+if VIP_EggShiftedRE then VIP_EggShiftedRE.OnClientEvent:Connect(vipUpdateEgg) end
+if VIP_EggGoneRE then
+    VIP_EggGoneRE.OnClientEvent:Connect(function(uid)
+        if uid and uid ~= vipStealingUid then vipEggList[uid] = nil end
+    end)
+end
+
+if EggCarryRE then
+    EggCarryRE.OnClientEvent:Connect(function(data)
+        if typeof(data) ~= "table" then return end
+        local uid = data.Uid
+        if data.IsCarrying == true and uid then
+            vipEggCarrying = true
+            vipCarrySignal = uid
+            if not vipHeldUid then vipHeldUid = uid end
+            if vipEggList[uid] then vipEggList[uid].state = "Carried" end
+        elseif data.IsCarrying == false then
+            vipEggCarrying = false
+            vipCarrySignal = nil
+            if uid and vipEggList[uid] then vipEggList[uid].state = "Dropped" end
+            if vipHeldUid then vipNeedRecover = true end
+        end
+    end)
+end
+
+local function vipIsEggAvailable(uid)
+    local live = vipEggList[uid]
+    if not live or not live.cframe then return false end
+    local cls = vipClassifyState(live.state)
+    if cls == "carried" or cls == "claimed" then return false end
+    return true
+end
+
+local function vipGetBaseSpeed()
+    local char = LocalPlayer.Character
+    if not char then return VIP_DEFAULT_SPEED end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return VIP_DEFAULT_SPEED end
+    local spd = hum.WalkSpeed
+    if not spd or spd <= 0 then return VIP_DEFAULT_SPEED end
+    return spd
+end
+
+local function vipKillMomentum(holdTicks)
+    holdTicks = holdTicks or VIP_STOP_HOLD_TICKS
+    local char = LocalPlayer.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hrp or not hum then return end
+    hum.WalkSpeed = 0
+    hum:MoveTo(hrp.Position)
+    hrp.AssemblyLinearVelocity = Vector3.zero
+    hrp.AssemblyAngularVelocity = Vector3.zero
+    local anchorCF = hrp.CFrame
+    for _ = 1, holdTicks do
+        local c = LocalPlayer.Character
+        if not c then break end
+        local cHrp = c:FindFirstChild("HumanoidRootPart")
+        local cHum = c:FindFirstChildOfClass("Humanoid")
+        if not cHrp or not cHum then break end
+        cHrp.AssemblyLinearVelocity = Vector3.zero
+        cHrp.AssemblyAngularVelocity = Vector3.zero
+        cHrp.CFrame = anchorCF
+        cHum:MoveTo(anchorCF.Position)
+        cHum.WalkSpeed = 0
+        task.wait(VIP_STOP_HOLD_WAIT)
+    end
+    hum.WalkSpeed = vipGetBaseSpeed()
+end
+
+local function vipAbortWalk()
+    local char = LocalPlayer.Character
+    if char then
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.WalkSpeed = 0
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            if hrp then hum:MoveTo(hrp.Position) end
+        end
+    end
+    vipKillMomentum()
+end
+
+local function vipIsHoldingEgg()
+    if vipEggCarrying then return true end
+    local char = LocalPlayer.Character
+    if not char then return false end
+    for _, tool in ipairs(char:GetChildren()) do
+        if tool:IsA("Tool") and tool.Name:lower():find("egg", 1, true) then return true end
+    end
+    return false
+end
+
+local function vipWalkToVerified(uid, targetProvider, arriveDist, maxTime)
+    arriveDist = arriveDist or VIP_ARRIVE_DIST
+    maxTime    = maxTime or VIP_MAX_TIME
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return false end
+    local baseSpeed = vipGetBaseSpeed()
+    local startTime = os.clock()
+    local lastVerify = 0
+    while vipIsRunning and os.clock() - startTime < maxTime do
+        if os.clock() - lastVerify > VIP_VERIFY_INTERVAL then
+            lastVerify = os.clock()
+            if not vipIsEggAvailable(uid) then vipAbortWalk() return false end
+        end
+        if vipIsRagdoll then
+            task.wait(0.1) startTime = os.clock()
+        else
+            local c = LocalPlayer.Character
+            if not c or c ~= char then break end
+            local cHrp = c:FindFirstChild("HumanoidRootPart")
+            local cHum = c:FindFirstChildOfClass("Humanoid")
+            if not cHrp or not cHum then break end
+            local curTarget = targetProvider and targetProvider()
+            if not curTarget then vipAbortWalk() return false end
+            local dist = (cHrp.Position - curTarget).Magnitude
+            if dist <= arriveDist then
+                if vipMovementMode == "teleport" then
+                    cHrp.CFrame = CFrame.new(curTarget + Vector3.new(0, VIP_TP_OFFSET_Y, 0)) * (cHrp.CFrame - cHrp.CFrame.Position)
+                    task.wait(0.05)
+                else
+                    vipKillMomentum()
+                end
+                if not vipIsEggAvailable(uid) then return false end
+                return true
+            end
+            if vipMovementMode == "teleport" then
+                cHum.WalkSpeed = 0
+                cHrp.CFrame = CFrame.new(curTarget + Vector3.new(0, VIP_TP_OFFSET_Y, 0)) * (cHrp.CFrame - cHrp.CFrame.Position)
+                task.wait(0.05)
+            else
+                if dist <= VIP_SLOW_RADIUS then
+                    local ratio = (dist - VIP_BRAKE_DIST) / (VIP_SLOW_RADIUS - VIP_BRAKE_DIST)
+                    cHum.WalkSpeed = math.max(VIP_MIN_SPEED, VIP_MIN_SPEED + (baseSpeed - VIP_MIN_SPEED) * math.clamp(ratio, 0, 1))
+                else
+                    cHum.WalkSpeed = baseSpeed
+                end
+                cHum:MoveTo(curTarget)
+                task.wait(0.05)
+            end
+        end
+    end
+    return false
+end
+
+local function vipWalkHomeRealtime()
+    local char = LocalPlayer.Character
+    if not char then return "nochar" end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return "nohum" end
+    local baseSpeed = vipGetBaseSpeed()
+    local startTime = os.clock()
+    while vipIsRunning and os.clock() - startTime < VIP_MAX_TIME do
+        if vipStealingUid then
+            local info = vipEggList[vipStealingUid]
+            if info then
+                local cls = vipClassifyState(info.state)
+                if cls ~= vipStealingState then vipStealingState = cls end
+                if cls == "dropped" then vipAbortWalk() return "dropped" end
+                if cls == "claimed" then vipAbortWalk() return "claimed" end
+                if cls == "gone" then vipAbortWalk() return "gone" end
+            end
+        end
+        if vipIsRagdoll then
+            task.wait(0.1) startTime = os.clock()
+        else
+            local c = LocalPlayer.Character
+            if not c or c ~= char then break end
+            local cHrp = c:FindFirstChild("HumanoidRootPart")
+            local cHum = c:FindFirstChildOfClass("Humanoid")
+            if not cHrp or not cHum then break end
+            local dist = (cHrp.Position - VIP_HOME_POS).Magnitude
+            if dist <= VIP_HOME_ARRIVE then vipKillMomentum() return "home" end
+            if vipMovementMode == "teleport" then
+                cHum.WalkSpeed = 0
+                cHrp.CFrame = CFrame.new(VIP_HOME_POS + Vector3.new(0, VIP_TP_OFFSET_Y, 0)) * (cHrp.CFrame - cHrp.CFrame.Position)
+                task.wait(0.05)
+            else
+                if dist <= VIP_SLOW_RADIUS then
+                    local ratio = (dist - VIP_BRAKE_DIST) / (VIP_SLOW_RADIUS - VIP_BRAKE_DIST)
+                    cHum.WalkSpeed = math.max(VIP_MIN_SPEED, VIP_MIN_SPEED + (baseSpeed - VIP_MIN_SPEED) * math.clamp(ratio, 0, 1))
+                else
+                    cHum.WalkSpeed = baseSpeed
+                end
+                cHum:MoveTo(VIP_HOME_POS)
+                task.wait(0.05)
+            end
+        end
+    end
+    return "timeout"
+end
+
+local function vipSendCarryAndWait(uid, timeout)
+    if not uid or not VIP_EggCarryRF then return false end
+    timeout = timeout or VIP_CARRY_CONFIRM_TIMEOUT
+    vipCarrySignal = nil
+    local ok, result = pcall(function() return VIP_EggCarryRF:InvokeServer({ Uid = uid }) end)
+    if ok and typeof(result) == "table" then
+        if result.Success == false or result.Ok == false then return false end
+    end
+    local st = os.clock()
+    while vipIsRunning and os.clock() - st < timeout do
+        if vipCarrySignal == uid then vipHeldUid = uid return true end
+        if vipCarrySignal and vipCarrySignal ~= uid then return false end
+        task.wait(0.05)
+    end
+    return false
+end
+
+local function vipStealLoopByUid(targetUid)
+    while vipIsRunning and vipStealingUid == targetUid do
+        local info = vipEggList[targetUid]
+        if not info then return end
+        local cls = vipClassifyState(info.state)
+        vipStealingState = cls
+        if cls == "claimed" or cls == "gone" then return end
+
+        if cls == "carried" then
+            if vipIsHoldingEgg() or vipEggCarrying then
+                local result = vipWalkHomeRealtime()
+                if result == "home" then return
+                elseif result == "claimed" or result == "gone" then return
+                end
+            else
+                local ws = os.clock()
+                while vipIsRunning and vipStealingUid == targetUid and os.clock() - ws < 3 do
+                    task.wait(0.15)
+                    local e2 = vipEggList[targetUid]
+                    if e2 and vipClassifyState(e2.state) ~= "carried" then break end
+                end
+            end
+        elseif cls == "dropped" or cls == "slot" then
+            local capturedUid = targetUid
+            local function eggProvider()
+                if not vipIsEggAvailable(capturedUid) then return nil end
+                local live = vipEggList[capturedUid]
+                if live and live.cframe then return live.cframe.Position end
+                return nil
+            end
+            if info.cframe then
+                local ok = vipWalkToVerified(capturedUid, eggProvider, VIP_ARRIVE_DIST, VIP_MAX_TIME)
+                if vipIsRunning and vipStealingUid == targetUid and ok then
+                    vipSendCarryAndWait(targetUid, VIP_CARRY_CONFIRM_TIMEOUT)
+                end
+            end
+        end
+        task.wait(0.3)
+    end
+end
+
+local function vipProcessStealByUid(targetUid, targetCategory)
+    if vipIsRunning then
+        vipIsRunning = false
+        task.wait(0.3)
+    end
+    vipIsRunning = true
+    vipHeldUid = nil
+    vipNeedRecover = false
+    vipStealingUid = targetUid
+    vipStealingCategory = targetCategory
+    vipStealingState = nil
+    local info = vipEggList[targetUid]
+    if info then vipStealingState = vipClassifyState(info.state) end
+    task.spawn(function()
+        while vipIsRunning and vipStealingUid == targetUid do
+            task.wait(VIP_SNAPSHOT_INTERVAL)
+            vipTakeSnapshot()
+        end
+    end)
+    vipStealLoopByUid(targetUid)
+    vipStealingUid = nil
+    vipStealingCategory = nil
+    vipStealingState = nil
+    vipIsRunning = false
+end
+
+-- VIP GUI
+local vipGui = Instance.new("ScreenGui")
+vipGui.Name = "StealEggVipGUI"
+vipGui.ResetOnSpawn = false
+if gethui then vipGui.Parent = gethui() else vipGui.Parent = CoreGui end
+
+local VipFrame = Instance.new("Frame")
+VipFrame.Size = UDim2.new(0, 180, 0, 118)
+VipFrame.Position = UDim2.new(0.5, -90, 0.5, -59)
+VipFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
+VipFrame.BorderSizePixel = 0
+VipFrame.Visible = false
+VipFrame.Parent = vipGui
+Instance.new("UICorner", VipFrame).CornerRadius = UDim.new(0, 8)
+local VipFS = Instance.new("UIStroke")
+VipFS.Thickness = 1.5
+VipFS.Color = Color3.fromRGB(255, 200, 60)
+VipFS.Parent = VipFrame
+
+local VipStealLabel = Instance.new("TextLabel")
+VipStealLabel.Size = UDim2.new(1, -8, 0, 18)
+VipStealLabel.Position = UDim2.new(0, 4, 0, 4)
+VipStealLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+VipStealLabel.Text = "IDLE"
+VipStealLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+VipStealLabel.Font = Enum.Font.Code
+VipStealLabel.TextSize = 10
+VipStealLabel.Parent = VipFrame
+Instance.new("UICorner", VipStealLabel).CornerRadius = UDim.new(0, 4)
+
+local function vipRefreshLabel()
+    if not vipStealingUid then
+        VipStealLabel.Text = "IDLE"
+        VipStealLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        VipStealLabel.BackgroundColor3 = Color3.fromRGB(40, 40, 50)
+        return
+    end
+    local st = tostring(vipStealingState or "?"):upper()
+    local col = Color3.fromRGB(255, 200, 100)
+    if vipStealingState == "slot" then col = Color3.fromRGB(150, 255, 180)
+    elseif vipStealingState == "carried" then col = Color3.fromRGB(100, 200, 255)
+    elseif vipStealingState == "dropped" then col = Color3.fromRGB(255, 150, 100)
+    elseif vipStealingState == "claimed" then col = Color3.fromRGB(150, 150, 150)
+    elseif vipStealingState == "gone" then col = Color3.fromRGB(255, 100, 100)
+    end
+    VipStealLabel.Text = "STEAL: " .. tostring(vipStealingCategory or "?") .. " [" .. st .. "]"
+    VipStealLabel.TextColor3 = col
+end
+
+local VipStopBtn = Instance.new("TextButton")
+VipStopBtn.Size = UDim2.new(1, -8, 0, 26)
+VipStopBtn.Position = UDim2.new(0, 4, 0, 24)
+VipStopBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+VipStopBtn.Text = "STOP"
+VipStopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+VipStopBtn.Font = Enum.Font.GothamBold
+VipStopBtn.TextSize = 11
+VipStopBtn.AutoButtonColor = false
+VipStopBtn.Parent = VipFrame
+Instance.new("UICorner", VipStopBtn).CornerRadius = UDim.new(0, 5)
+
+local VipModeBtn = Instance.new("TextButton")
+VipModeBtn.Size = UDim2.new(1, -8, 0, 26)
+VipModeBtn.Position = UDim2.new(0, 4, 0, 54)
+VipModeBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 60)
+VipModeBtn.Text = "Mode: Walk"
+VipModeBtn.TextColor3 = Color3.fromRGB(30, 30, 30)
+VipModeBtn.Font = Enum.Font.GothamBold
+VipModeBtn.TextSize = 11
+VipModeBtn.AutoButtonColor = false
+VipModeBtn.Parent = VipFrame
+Instance.new("UICorner", VipModeBtn).CornerRadius = UDim.new(0, 5)
+
+VipModeBtn.MouseButton1Click:Connect(function()
+    if vipMovementMode == "walk" then
+        vipMovementMode = "teleport"
+        VipModeBtn.Text = "Mode: Teleport"
+        VipModeBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 60)
+    else
+        vipMovementMode = "walk"
+        VipModeBtn.Text = "Mode: Walk"
+        VipModeBtn.BackgroundColor3 = Color3.fromRGB(255, 200, 60)
+    end
+end)
+
+local VipShowBtn = Instance.new("TextButton")
+VipShowBtn.Size = UDim2.new(1, -8, 0, 26)
+VipShowBtn.Position = UDim2.new(0, 4, 0, 84)
+VipShowBtn.BackgroundColor3 = Color3.fromRGB(80, 150, 220)
+VipShowBtn.Text = "SHOW EGG"
+VipShowBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+VipShowBtn.Font = Enum.Font.GothamBold
+VipShowBtn.TextSize = 11
+VipShowBtn.AutoButtonColor = false
+VipShowBtn.Parent = VipFrame
+Instance.new("UICorner", VipShowBtn).CornerRadius = UDim.new(0, 5)
+
+VipStopBtn.MouseButton1Click:Connect(function()
+    vipIsRunning = false
+    vipStealingUid = nil
+    vipStealingCategory = nil
+    vipStealingState = nil
+    vipAbortWalk()
+    VipStealLabel.Text = "STOPPED"
+    VipStealLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+end)
+
+-- SHOW EGG PANEL VIP
+local vipShowGui = Instance.new("ScreenGui")
+vipShowGui.Name = "VipShowEggGUI"
+vipShowGui.ResetOnSpawn = false
+vipShowGui.Enabled = false
+if gethui then vipShowGui.Parent = gethui() else vipShowGui.Parent = CoreGui end
+
+local VSFrame = Instance.new("Frame")
+VSFrame.Size = UDim2.new(0, 533, 0, 311)
+VSFrame.Position = UDim2.new(0.5, -266, 0.5, -155)
+VSFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 28)
+VSFrame.BorderSizePixel = 0
+VSFrame.Parent = vipShowGui
+Instance.new("UICorner", VSFrame).CornerRadius = UDim.new(0, 8)
+local VSFS = Instance.new("UIStroke")
+VSFS.Thickness = 1.5
+VSFS.Color = Color3.fromRGB(255, 200, 60)
+VSFS.Parent = VSFrame
+
+local VSTitle = Instance.new("TextLabel")
+VSTitle.Size = UDim2.new(1, -140, 0, 18)
+VSTitle.Position = UDim2.new(0, 4, 0, 3)
+VSTitle.BackgroundTransparency = 1
+VSTitle.Text = "SHOW EGG VIP"
+VSTitle.TextColor3 = Color3.fromRGB(255, 220, 150)
+VSTitle.Font = Enum.Font.GothamBold
+VSTitle.TextSize = 11
+VSTitle.TextXAlignment = Enum.TextXAlignment.Left
+VSTitle.Parent = VSFrame
+
+local VSRefreshBtn = Instance.new("TextButton")
+VSRefreshBtn.Size = UDim2.new(0, 60, 0, 18)
+VSRefreshBtn.Position = UDim2.new(1, -128, 0, 3)
+VSRefreshBtn.BackgroundColor3 = Color3.fromRGB(80, 180, 80)
+VSRefreshBtn.Text = "REFRESH"
+VSRefreshBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+VSRefreshBtn.Font = Enum.Font.GothamBold
+VSRefreshBtn.TextSize = 8
+VSRefreshBtn.AutoButtonColor = false
+VSRefreshBtn.Parent = VSFrame
+Instance.new("UICorner", VSRefreshBtn).CornerRadius = UDim.new(0, 4)
+
+local VSCloseBtn = Instance.new("TextButton")
+VSCloseBtn.Size = UDim2.new(0, 60, 0, 18)
+VSCloseBtn.Position = UDim2.new(1, -66, 0, 3)
+VSCloseBtn.BackgroundColor3 = Color3.fromRGB(200, 60, 60)
+VSCloseBtn.Text = "CLOSE"
+VSCloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+VSCloseBtn.Font = Enum.Font.GothamBold
+VSCloseBtn.TextSize = 8
+VSCloseBtn.AutoButtonColor = false
+VSCloseBtn.Parent = VSFrame
+Instance.new("UICorner", VSCloseBtn).CornerRadius = UDim.new(0, 4)
+
+local VSBiomeScroll = Instance.new("ScrollingFrame")
+VSBiomeScroll.Size = UDim2.new(0, 110, 1, -36)
+VSBiomeScroll.Position = UDim2.new(0, 4, 0, 24)
+VSBiomeScroll.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+VSBiomeScroll.BorderSizePixel = 0
+VSBiomeScroll.ScrollBarThickness = 4
+VSBiomeScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+VSBiomeScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+VSBiomeScroll.Parent = VSFrame
+Instance.new("UICorner", VSBiomeScroll).CornerRadius = UDim.new(0, 4)
+
+local VSBiomeList = Instance.new("UIListLayout")
+VSBiomeList.SortOrder = Enum.SortOrder.LayoutOrder
+VSBiomeList.Padding = UDim.new(0, 2)
+VSBiomeList.Parent = VSBiomeScroll
+
+local VSDetailScroll = Instance.new("ScrollingFrame")
+VSDetailScroll.Size = UDim2.new(1, -120, 1, -36)
+VSDetailScroll.Position = UDim2.new(0, 116, 0, 24)
+VSDetailScroll.BackgroundColor3 = Color3.fromRGB(12, 12, 18)
+VSDetailScroll.BorderSizePixel = 0
+VSDetailScroll.ScrollBarThickness = 4
+VSDetailScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+VSDetailScroll.AutomaticCanvasSize = Enum.AutomaticSize.Y
+VSDetailScroll.Parent = VSFrame
+Instance.new("UICorner", VSDetailScroll).CornerRadius = UDim.new(0, 4)
+
+local VSDetailList = Instance.new("UIListLayout")
+VSDetailList.SortOrder = Enum.SortOrder.LayoutOrder
+VSDetailList.Padding = UDim.new(0, 1)
+VSDetailList.Parent = VSDetailScroll
+
+local VSInfoLabel = Instance.new("TextLabel")
+VSInfoLabel.Size = UDim2.new(1, -120, 0, 16)
+VSInfoLabel.Position = UDim2.new(0, 116, 0, 8)
+VSInfoLabel.BackgroundTransparency = 1
+VSInfoLabel.Text = "Chọn biome..."
+VSInfoLabel.TextColor3 = Color3.fromRGB(255, 220, 150)
+VSInfoLabel.Font = Enum.Font.GothamBold
+VSInfoLabel.TextSize = 10
+VSInfoLabel.TextXAlignment = Enum.TextXAlignment.Left
+VSInfoLabel.Parent = VSFrame
+
+local VIP_ALL_BIOMES = {
+    "Forest","Lake","Desert","Jungle","Snow","Volcano",
+    "Abyss Ocean","Prehistoric","Cosmic","Cherry Blossom",
+    "Titan Temple","Light Dark",
+}
+
+local vipShowBuckets = {}
+local vipShowSelectedBiome = nil
+local vipShowButtons = {}
+
+local function vipRebuildShowBuckets()
+    vipShowBuckets = {}
+    for _, b in ipairs(VIP_ALL_BIOMES) do vipShowBuckets[b] = {} end
+    for uid, info in pairs(vipEggList) do
+        local cls = vipClassifyState(info.state)
+        if cls ~= "claimed" then
+            local b = info.area or "Unknown"
+            if not vipShowBuckets[b] then vipShowBuckets[b] = {} end
+            table.insert(vipShowBuckets[b], {
+                uid = uid, category = info.category,
+                state = info.state, stateCls = cls, cframe = info.cframe,
+                mutations = info.mutations or {}, slot = info.slot,
+            })
+        end
+    end
+    for _, list in pairs(vipShowBuckets) do
+        table.sort(list, function(a, b)
+            return tostring(a.slot or "") < tostring(b.slot or "")
+        end)
+    end
+end
+
+local function vipClearShowDetail()
+    for _, c in ipairs(VSDetailScroll:GetChildren()) do
+        if c:IsA("TextLabel") or c:IsA("TextButton") or c:IsA("Frame") then c:Destroy() end
+    end
+end
+
+local function vipShowBiomeDetail(biome)
+    vipClearShowDetail()
+    VSInfoLabel.Text = "Biome: " .. biome
+    local list = vipShowBuckets[biome] or {}
+
+    if #list == 0 then
+        local lbl = Instance.new("TextLabel")
+        lbl.Size = UDim2.new(1, -4, 0, 16)
+        lbl.BackgroundTransparency = 1
+        lbl.Text = "  (không có egg)"
+        lbl.TextColor3 = Color3.fromRGB(150, 150, 180)
+        lbl.Font = Enum.Font.Code
+        lbl.TextSize = 9
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.Parent = VSDetailScroll
+        return
+    end
+
+    for i, e in ipairs(list) do
+        local row = Instance.new("Frame")
+        row.Size = UDim2.new(1, -4, 0, 18)
+        row.BackgroundTransparency = 1
+        row.LayoutOrder = i
+        row.Parent = VSDetailScroll
+
+        local slotStr = tostring(e.slot or "?"):gsub("Slot_0*", "Slot")
+        if not slotStr:find("Slot", 1, true) then slotStr = "Slot" .. slotStr end
+
+        local mutStr = ""
+        local mutCol = nil
+        if #e.mutations > 0 then
+            local shorts = {}
+            for _, m in ipairs(e.mutations) do
+                table.insert(shorts, tostring(m):lower())
+                if not mutCol and MUTATION_COLORS_VIP[m] then mutCol = MUTATION_COLORS_VIP[m] end
+            end
+            mutStr = "[" .. table.concat(shorts, "+") .. "]"
+        end
+
+        local stateStr = "[" .. tostring(e.state or "?"):lower() .. "]"
+
+        local col = Color3.fromRGB(220, 220, 240)
+        if e.stateCls == "slot" then col = Color3.fromRGB(150, 255, 180)
+        elseif e.stateCls == "carried" then col = Color3.fromRGB(255, 150, 150)
+        elseif e.stateCls == "dropped" then col = Color3.fromRGB(255, 200, 100)
+        end
+        if mutCol then col = mutCol end
+        if e.uid == vipStealingUid then col = Color3.fromRGB(255, 80, 80) end
+
+        local text = string.format("%s %s %s%s",
+            slotStr, tostring(e.category or "?"), stateStr, mutStr)
+
+        local info = Instance.new("TextLabel")
+        info.Size = UDim2.new(0.76, 0, 1, 0)
+        info.BackgroundTransparency = 1
+        info.Text = text
+        info.TextColor3 = col
+        info.Font = Enum.Font.Code
+        info.TextSize = 10
+        info.TextXAlignment = Enum.TextXAlignment.Left
+        info.TextScaled = true
+        info.TextWrapped = false
+        info.Parent = row
+
+        local sizeCon = Instance.new("UITextSizeConstraint")
+        sizeCon.MaxTextSize = 10
+        sizeCon.MinTextSize = 6
+        sizeCon.Parent = info
+
+        local stealBtn = Instance.new("TextButton")
+        stealBtn.Size = UDim2.new(0.23, -2, 0.95, 0)
+        stealBtn.Position = UDim2.new(0.77, 2, 0.025, 0)
+        if e.uid == vipStealingUid then
+            stealBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
+            stealBtn.Text = "STOP"
+        else
+            stealBtn.BackgroundColor3 = Color3.fromRGB(220, 60, 60)
+            stealBtn.Text = "STEAL"
+        end
+        stealBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        stealBtn.Font = Enum.Font.GothamBold
+        stealBtn.TextSize = 9
+        stealBtn.AutoButtonColor = false
+        stealBtn.Parent = row
+        Instance.new("UICorner", stealBtn).CornerRadius = UDim.new(0, 3)
+
+        local capturedUid = e.uid
+        local capturedCategory = e.category
+        stealBtn.MouseButton1Click:Connect(function()
+            if capturedUid == vipStealingUid then
+                vipIsRunning = false
+                vipStealingUid = nil
+                vipStealingCategory = nil
+                vipStealingState = nil
+                vipAbortWalk()
+                VipStealLabel.Text = "STOPPED"
+                VipStealLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+            else
+                vipShowGui.Enabled = false
+                VipShowBtn.BackgroundColor3 = Color3.fromRGB(80, 150, 220)
+                task.spawn(function()
+                    vipProcessStealByUid(capturedUid, capturedCategory)
+                end)
+            end
+        end)
+    end
+end
+
+local function vipSelectShowBiome(biome)
+    vipShowSelectedBiome = biome
+    for b, btn in pairs(vipShowButtons) do
+        btn.BackgroundColor3 = (b == biome)
+            and Color3.fromRGB(200, 160, 60)
+            or Color3.fromRGB(40, 40, 60)
+    end
+    vipShowBiomeDetail(biome)
+end
+
+local function vipRebuildShowButtons()
+    for _, c in ipairs(VSBiomeScroll:GetChildren()) do
+        if c:IsA("TextButton") or c:IsA("TextLabel") then c:Destroy() end
+    end
+    vipShowButtons = {}
+
+    for i, biome in ipairs(VIP_ALL_BIOMES) do
+        local count = #(vipShowBuckets[biome] or {})
+        local btn = Instance.new("TextButton")
+        btn.Size = UDim2.new(1, -4, 0, 22)
+        btn.BackgroundColor3 = Color3.fromRGB(40, 40, 60)
+        btn.Text = " " .. biome .. " (" .. count .. ")"
+        btn.TextColor3 = Color3.fromRGB(220, 220, 240)
+        btn.Font = Enum.Font.GothamBold
+        btn.TextSize = 10
+        btn.TextXAlignment = Enum.TextXAlignment.Left
+        btn.AutoButtonColor = false
+        btn.LayoutOrder = i
+        btn.Parent = VSBiomeScroll
+        vipShowButtons[biome] = btn
+        btn.MouseButton1Click:Connect(function() vipSelectShowBiome(biome) end)
+    end
+
+    if vipShowSelectedBiome and vipShowBuckets[vipShowSelectedBiome] then
+        vipSelectShowBiome(vipShowSelectedBiome)
+    else
+        vipSelectShowBiome(VIP_ALL_BIOMES[1])
+    end
+end
+
+VipShowBtn.MouseButton1Click:Connect(function()
+    vipShowGui.Enabled = not vipShowGui.Enabled
+    if vipShowGui.Enabled then
+        vipTakeSnapshot()
+        vipRebuildShowBuckets()
+        vipRebuildShowButtons()
+        VipShowBtn.BackgroundColor3 = Color3.fromRGB(60, 120, 180)
+    else
+        VipShowBtn.BackgroundColor3 = Color3.fromRGB(80, 150, 220)
+    end
+end)
+
+VSRefreshBtn.MouseButton1Click:Connect(function()
+    vipTakeSnapshot()
+    vipRebuildShowBuckets()
+    vipRebuildShowButtons()
+end)
+
+VSCloseBtn.MouseButton1Click:Connect(function()
+    vipShowGui.Enabled = false
+    VipShowBtn.BackgroundColor3 = Color3.fromRGB(80, 150, 220)
+end)
+
+task.spawn(function()
+    while vipGui.Parent do
+        task.wait(0.4)
+        vipRefreshLabel()
+        if vipShowGui.Enabled then
+            vipTakeSnapshot()
+            vipRebuildShowBuckets()
+            vipRebuildShowButtons()
+        end
+    end
+end)
+
+local vipD, vipDS, vipSP
+VipFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        vipD = true
+        vipDS = input.Position
+        vipSP = VipFrame.Position
+        input.Changed:Connect(function()
+            if input.UserInputState == Enum.UserInputState.End then vipD = false end
+        end)
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if vipD and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - vipDS
+        VipFrame.Position = UDim2.new(vipSP.X.Scale, vipSP.X.Offset + delta.X, vipSP.Y.Scale, vipSP.Y.Offset + delta.Y)
+    end
+end)
+
+local vsD, vsDS, vsSP
+VSFrame.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        if input.Position.Y < VSFrame.AbsolutePosition.Y + 24 then
+            vsD = true
+            vsDS = input.Position
+            vsSP = VSFrame.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then vsD = false end
+            end)
+        end
+    end
+end)
+UserInputService.InputChanged:Connect(function(input)
+    if vsD and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - vsDS
+        VSFrame.Position = UDim2.new(vsSP.X.Scale, vsSP.X.Offset + delta.X, vsSP.Y.Scale, vsSP.Y.Offset + delta.Y)
     end
 end)
 
@@ -519,7 +1443,6 @@ local function monitorCharacterStun(char)
     if not char then return end
     local hum = char:WaitForChild("Humanoid", 5)
     if not hum then return end
-
     hum.StateChanged:Connect(function(_, newState)
         if newState == Enum.HumanoidStateType.Physics or newState == Enum.HumanoidStateType.Ragdoll
             or newState == Enum.HumanoidStateType.FallingDown or newState == Enum.HumanoidStateType.PlatformStanding then
@@ -1063,10 +1986,7 @@ function iOS26Glass:CreateWindow(titleText)
     MinimizeBtn.TextSize = 14
     MinimizeBtn.AutoButtonColor = false
     MinimizeBtn.Parent = TopBar
-
-    local MinCorner = Instance.new("UICorner")
-    MinCorner.CornerRadius = UDim.new(1, 0)
-    MinCorner.Parent = MinimizeBtn
+    Instance.new("UICorner", MinimizeBtn).CornerRadius = UDim.new(1, 0)
 
     enableDragging(TopBar, MainFrame)
     enableDragging(MainFrame, MainFrame)
@@ -1078,10 +1998,7 @@ function iOS26Glass:CreateWindow(titleText)
     Sidebar.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
     Sidebar.ClipsDescendants = true
     Sidebar.Parent = MainFrame
-
-    local SideCorner = Instance.new("UICorner")
-    SideCorner.CornerRadius = UDim.new(0, 16)
-    SideCorner.Parent = Sidebar
+    Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 16)
 
     local SideStroke = Instance.new("UIStroke")
     SideStroke.Thickness = 1
@@ -1118,16 +2035,7 @@ function iOS26Glass:CreateWindow(titleText)
     AvatarImage.Position = UDim2.new(0.5, -24, 0, 4)
     AvatarImage.BackgroundTransparency = 1
     AvatarImage.Parent = PlayerContainer
-
-    local AvatarCorner = Instance.new("UICorner")
-    AvatarCorner.CornerRadius = UDim.new(1, 0)
-    AvatarCorner.Parent = AvatarImage
-
-    local AvatarStroke = Instance.new("UIStroke")
-    AvatarStroke.Thickness = 1
-    AvatarStroke.Color = Color3.fromRGB(255, 255, 255)
-    AvatarStroke.Transparency = 0.65
-    AvatarStroke.Parent = AvatarImage
+    Instance.new("UICorner", AvatarImage).CornerRadius = UDim.new(1, 0)
 
     task.spawn(function()
         local content, isLoaded = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
@@ -1234,10 +2142,7 @@ function iOS26Glass:CreateWindow(titleText)
         TabButton.Font = Enum.Font.GothamMedium
         TabButton.TextSize = 11.5
         TabButton.Parent = TabHolder
-
-        local TabBtnCorner = Instance.new("UICorner")
-        TabBtnCorner.CornerRadius = UDim.new(0, 9)
-        TabBtnCorner.Parent = TabButton
+        Instance.new("UICorner", TabButton).CornerRadius = UDim.new(0, 9)
 
         local TabContent = Instance.new("ScrollingFrame")
         TabContent.Name = tabName .. "_Content"
@@ -1288,10 +2193,7 @@ function iOS26Glass:CreateWindow(titleText)
             ProfileFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             ProfileFrame.BackgroundTransparency = 0.78
             ProfileFrame.Parent = TabContent
-
-            local PCorner = Instance.new("UICorner")
-            PCorner.CornerRadius = UDim.new(0, 10)
-            PCorner.Parent = ProfileFrame
+            Instance.new("UICorner", ProfileFrame).CornerRadius = UDim.new(0, 10)
 
             local PStroke = Instance.new("UIStroke")
             PStroke.Thickness = 1.5
@@ -1304,16 +2206,7 @@ function iOS26Glass:CreateWindow(titleText)
             CircleAvatar.Position = UDim2.new(0, 8, 0.5, -17)
             CircleAvatar.BackgroundTransparency = 1
             CircleAvatar.Parent = ProfileFrame
-
-            local CircleCorner = Instance.new("UICorner")
-            CircleCorner.CornerRadius = UDim.new(1, 0)
-            CircleCorner.Parent = CircleAvatar
-
-            local CircleStroke = Instance.new("UIStroke")
-            CircleStroke.Thickness = 1.5
-            CircleStroke.Color = Color3.fromRGB(255, 255, 255)
-            CircleStroke.Transparency = 0.5
-            CircleStroke.Parent = CircleAvatar
+            Instance.new("UICorner", CircleAvatar).CornerRadius = UDim.new(1, 0)
 
             task.spawn(function()
                 local content, isLoaded = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
@@ -1356,10 +2249,7 @@ function iOS26Glass:CreateWindow(titleText)
             BtnFrame.TextSize = 11.5
             BtnFrame.AutoButtonColor = false
             BtnFrame.Parent = TabContent
-
-            local Corner = Instance.new("UICorner")
-            Corner.CornerRadius = UDim.new(0, 10)
-            Corner.Parent = BtnFrame
+            Instance.new("UICorner", BtnFrame).CornerRadius = UDim.new(0, 10)
 
             local Stroke = Instance.new("UIStroke")
             Stroke.Thickness = 1.5
@@ -1382,10 +2272,7 @@ function iOS26Glass:CreateWindow(titleText)
             ToggleFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             ToggleFrame.BackgroundTransparency = 0.78
             ToggleFrame.Parent = TabContent
-
-            local TCorner = Instance.new("UICorner")
-            TCorner.CornerRadius = UDim.new(0, 10)
-            TCorner.Parent = ToggleFrame
+            Instance.new("UICorner", ToggleFrame).CornerRadius = UDim.new(0, 10)
 
             local TStroke = Instance.new("UIStroke")
             TStroke.Thickness = 1.5
@@ -1412,10 +2299,7 @@ function iOS26Glass:CreateWindow(titleText)
             SwitchTrack.BackgroundColor3 = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
             SwitchTrack.BackgroundTransparency = toggled and 0.25 or 0.6
             SwitchTrack.Parent = ToggleFrame
-
-            local TrackCorner = Instance.new("UICorner")
-            TrackCorner.CornerRadius = UDim.new(1, 0)
-            TrackCorner.Parent = SwitchTrack
+            Instance.new("UICorner", SwitchTrack).CornerRadius = UDim.new(1, 0)
 
             local Knob = Instance.new("Frame")
             Knob.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1424,10 +2308,7 @@ function iOS26Glass:CreateWindow(titleText)
             Knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             Knob.BackgroundTransparency = 0.15
             Knob.Parent = SwitchTrack
-
-            local KnobCorner = Instance.new("UICorner")
-            KnobCorner.CornerRadius = UDim.new(1, 0)
-            KnobCorner.Parent = Knob
+            Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
 
             local ClickArea = Instance.new("TextButton")
             ClickArea.Size = UDim2.new(1, 0, 1, 0)
@@ -1467,10 +2348,7 @@ function iOS26Glass:CreateWindow(titleText)
             SliderFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             SliderFrame.BackgroundTransparency = 0.78
             SliderFrame.Parent = TabContent
-
-            local SCorner = Instance.new("UICorner")
-            SCorner.CornerRadius = UDim.new(0, 10)
-            SCorner.Parent = SliderFrame
+            Instance.new("UICorner", SliderFrame).CornerRadius = UDim.new(0, 10)
 
             local SStroke = Instance.new("UIStroke")
             SStroke.Thickness = 1
@@ -1506,20 +2384,14 @@ function iOS26Glass:CreateWindow(titleText)
             Track.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             Track.BackgroundTransparency = 0.65
             Track.Parent = SliderFrame
-
-            local TrackCorner = Instance.new("UICorner")
-            TrackCorner.CornerRadius = UDim.new(1, 0)
-            TrackCorner.Parent = Track
+            Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
 
             local Fill = Instance.new("Frame")
             Fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
             Fill.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
             Fill.BackgroundTransparency = 0.25
             Fill.Parent = Track
-
-            local FillCorner = Instance.new("UICorner")
-            FillCorner.CornerRadius = UDim.new(1, 0)
-            FillCorner.Parent = Fill
+            Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
 
             local Thumb = Instance.new("Frame")
             Thumb.AnchorPoint = Vector2.new(0.5, 0.5)
@@ -1528,10 +2400,7 @@ function iOS26Glass:CreateWindow(titleText)
             Thumb.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
             Thumb.BackgroundTransparency = 0.15
             Thumb.Parent = Track
-
-            local ThumbCorner = Instance.new("UICorner")
-            ThumbCorner.CornerRadius = UDim.new(1, 0)
-            ThumbCorner.Parent = Thumb
+            Instance.new("UICorner", Thumb).CornerRadius = UDim.new(1, 0)
 
             local function update(input)
                 local relativeX = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
@@ -1577,15 +2446,25 @@ local ArenaTab  = Library:AddTab("Arena")
 local PlayerTab = Library:AddTab("Player")
 local MiscTab   = Library:AddTab("Misc")
 
--- =================================================================
 -- TAB MAIN
--- =================================================================
 MainTab:AddToggle("Bypass Guard/Fly", false, function(val)
     BFFrame.Visible = val
-    if val then
-        print("[BypassGuard/Fly] Hiện menu")
-    else
-        print("[BypassGuard/Fly] Ẩn menu")
+end)
+
+MainTab:AddToggle("Panel Steal Egg Vip", false, function(val)
+    VipFrame.Visible = val
+    if not val then
+        vipShowGui.Enabled = false
+        VipShowBtn.BackgroundColor3 = Color3.fromRGB(80, 150, 220)
+        if vipIsRunning then
+            vipIsRunning = false
+            vipStealingUid = nil
+            vipStealingCategory = nil
+            vipStealingState = nil
+            vipAbortWalk()
+            VipStealLabel.Text = "STOPPED"
+            VipStealLabel.TextColor3 = Color3.fromRGB(255, 100, 100)
+        end
     end
 end)
 
@@ -1595,7 +2474,7 @@ MainTab:AddToggle("Auto Zone", autoZoneActive, function(val)
     if not val then autoZoneState = 0 end
 end)
 
--- TAB ARENA - TẤT CẢ MẶC ĐỊNH TẮT
+-- TAB ARENA
 ArenaTab:AddToggle("Hiện cụm nút Arena", false, function(state)
     ArenaContainer.Visible = state
 end)
@@ -1657,7 +2536,6 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
     pcall(function()
         local Workspace = game:GetService("Workspace")
         local Lighting = game:GetService("Lighting")
-
         local function optimize(obj)
             pcall(function()
                 if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
@@ -1680,7 +2558,6 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
                 end
             end)
         end
-
         pcall(function()
             Lighting.GlobalShadows = false
             Lighting.FogEnd = 9e9
@@ -1693,7 +2570,6 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
                 end
             end
         end)
-
         pcall(function()
             local Terrain = Workspace.Terrain
             Terrain.WaterWaveSize = 0
@@ -1701,15 +2577,12 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
             Terrain.WaterReflectance = 0
             Terrain.WaterTransparency = 1
         end)
-
         for _, obj in ipairs(game:GetDescendants()) do optimize(obj) end
-
         if not getgenv().FTGS_FixLagConnection then
             getgenv().FTGS_FixLagConnection = game.DescendantAdded:Connect(function(obj)
                 task.defer(function() optimize(obj) end)
             end)
         end
-
         pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     end)
 end)
@@ -1740,18 +2613,15 @@ MiscTab:AddToggle("Hide Map", false, function(state)
     setBuildHidden(state)
 end)
 
--- DELETE MAP - workspace.World.Build
 local deleteMapActive = false
 local deleteMapLoopThread = nil
 
 local function runDeleteMapLogic()
     pcall(function()
         if getgenv().DynamicFloorCleanup then getgenv().DynamicFloorCleanup() end
-
         local floorPart, wallLeft, wallRight, wallFolder = nil, nil, nil, nil
         local heartbeatConnection = nil
         local isEnabled = false
-
         local function destroyBuildMap()
             pcall(function()
                 local world = workspace:FindFirstChild("World")
@@ -1760,7 +2630,6 @@ local function runDeleteMapLogic()
                 end
             end)
         end
-
         local function cleanup()
             isEnabled = false
             if heartbeatConnection then heartbeatConnection:Disconnect() heartbeatConnection = nil end
@@ -1770,37 +2639,31 @@ local function runDeleteMapLogic()
             if wallFolder then wallFolder:Destroy() wallFolder = nil end
         end
         getgenv().DynamicFloorCleanup = cleanup
-
         local function enableSystem()
             cleanup()
             isEnabled = true
             destroyBuildMap()
-
             wallFolder = Instance.new("Folder")
             wallFolder.Name = "Dynamic_200Stud_System"
             wallFolder.Parent = workspace
-
             floorPart = Instance.new("Part")
             floorPart.Size = Vector3.new(200, 10, 200)
             floorPart.CanCollide = true
             floorPart.Anchored = true
             floorPart.Transparency = 1
             floorPart.Parent = wallFolder
-
             wallLeft = Instance.new("Part")
             wallLeft.Size = Vector3.new(200, 52, 10)
             wallLeft.CanCollide = true
             wallLeft.Anchored = true
             wallLeft.Transparency = 1
             wallLeft.Parent = wallFolder
-
             wallRight = Instance.new("Part")
             wallRight.Size = Vector3.new(200, 52, 10)
             wallRight.CanCollide = true
             wallRight.Anchored = true
             wallRight.Transparency = 1
             wallRight.Parent = wallFolder
-
             heartbeatConnection = RunService.Heartbeat:Connect(function()
                 pcall(function()
                     local char = LocalPlayer.Character
@@ -1820,7 +2683,6 @@ local function runDeleteMapLogic()
                 end)
             end)
         end
-
         enableSystem()
     end)
 end
@@ -1847,4 +2709,4 @@ MiscTab:AddButton("Server NhiiiX-HopSV", function()
     end)
 end)
 
-print("[DragonNova] Loaded | Tab Main: Bypass Guard/Fly | Menu 1% | Arena OFF")
+print("[DragonNova] Loaded | VIP + AlignPosition Fly + Camera Lock")
