@@ -43,7 +43,6 @@ local FLY_FOLDER_NAME = "Fly"
 local JAIL_HOLD_TIME = 0.2
 local jailTpRunning = false
 
--- ⭐ BodyPosition Y-only (player tự do di chuyển X/Z)
 local flyBodyPos = nil
 local flyRiseThread = nil
 local flyFastRise = false
@@ -272,7 +271,7 @@ local function teleportToBase()
 end
 
 -- =================================================================
--- FLY (BodyPosition Y-only - player tự do X/Z)
+-- FLY (BodyPosition Y-only)
 -- =================================================================
 local function createFlyFolder()
     if flyFolder and flyFolder.Parent then flyFolder:Destroy() end
@@ -361,7 +360,6 @@ local function startFlyPlatform()
     end)
 end
 
--- ⭐ Rise 5y/s khi carry
 local function flyRiseFast()
     if not flyPlatform or not flyPlatform.Parent then return end
     if flyFastRise then return end
@@ -1849,7 +1847,9 @@ function iOS26Glass:CreateWindow(titleText)
     MainFrame.BackgroundTransparency = 0.78
     MainFrame.ClipsDescendants = true
     MainFrame.Parent = ScreenGui
-    Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 22)
+    local MainCorner = Instance.new("UICorner")
+    MainCorner.CornerRadius = UDim.new(0, 22)
+    MainCorner.Parent = MainFrame
 
     local MainStroke = Instance.new("UIStroke")
     MainStroke.Thickness = 1.2
@@ -2008,15 +2008,20 @@ function iOS26Glass:CreateWindow(titleText)
         Sidebar.Visible = false
         ContentContainer.Visible = false
         TopBar.Visible = false
-        local dotTween = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+
+        local dotTween = TweenService:Create(MainFrame,
+            TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
             { Size = UDim2.new(0, 18, 0, 18), Position = UDim2.new(0.5, -9, 0.01, 0) })
-        TweenService:Create(MainFrame, TweenInfo.new(0.25), { CornerRadius = UDim.new(1, 0) })
+        TweenService:Create(MainCorner, TweenInfo.new(0.25), { CornerRadius = UDim.new(1, 0) }):Play()
         dotTween:Play()
         dotTween.Completed:Wait()
-        local expandIsland = TweenService:Create(MainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+
+        local expandIsland = TweenService:Create(MainFrame,
+            TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
             { Size = islandSize, Position = islandPosition })
         expandIsland:Play()
         expandIsland.Completed:Wait()
+
         IslandLabel.Visible = true
         isMinimized = true
         isAnimating = false
@@ -2026,25 +2031,33 @@ function iOS26Glass:CreateWindow(titleText)
         if isAnimating or not isMinimized then return end
         isAnimating = true
         IslandLabel.Visible = false
-        local swellTween = TweenService:Create(MainFrame, TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+
+        local swellTween = TweenService:Create(MainFrame,
+            TweenInfo.new(0.18, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
             { Size = UDim2.new(0, 176, 0, 44), Position = UDim2.new(0.5, -88, 0.01, 0) })
         swellTween:Play()
         swellTween.Completed:Wait()
-        local menuTween = TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
+
+        local menuTween = TweenService:Create(MainFrame,
+            TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
             { Size = originalSize, Position = openPosition })
-        TweenService:Create(MainFrame, TweenInfo.new(0.35), { CornerRadius = UDim.new(0, 22) }):Play()
+        TweenService:Create(MainCorner, TweenInfo.new(0.35), { CornerRadius = UDim.new(0, 22) }):Play()
         menuTween:Play()
         menuTween.Completed:Wait()
+
         Sidebar.Visible = true
         ContentContainer.Visible = true
         TopBar.Visible = true
+
         isMinimized = false
         isAnimating = false
     end
 
     MinimizeBtn.MouseButton1Click:Connect(minimizeMenu)
     MainFrame.InputBegan:Connect(function(input)
-        if isMinimized and not isAnimating and (input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch) then
+        if isMinimized and not isAnimating and (
+            input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch
+        ) then
             expandMenu()
         end
     end)
@@ -2113,21 +2126,25 @@ function iOS26Glass:CreateWindow(titleText)
             ProfileFrame.BackgroundTransparency = 0.78
             ProfileFrame.Parent = TabContent
             Instance.new("UICorner", ProfileFrame).CornerRadius = UDim.new(0, 10)
+
             local PStroke = Instance.new("UIStroke")
             PStroke.Thickness = 1.5
             PStroke.Color = Color3.fromRGB(255, 255, 255)
             PStroke.Transparency = 0.5
             PStroke.Parent = ProfileFrame
+
             local CircleAvatar = Instance.new("ImageLabel")
             CircleAvatar.Size = UDim2.new(0, 34, 0, 34)
             CircleAvatar.Position = UDim2.new(0, 8, 0.5, -17)
             CircleAvatar.BackgroundTransparency = 1
             CircleAvatar.Parent = ProfileFrame
             Instance.new("UICorner", CircleAvatar).CornerRadius = UDim.new(1, 0)
+
             task.spawn(function()
                 local content, isLoaded = Players:GetUserThumbnailAsync(LocalPlayer.UserId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
                 if isLoaded and content then CircleAvatar.Image = content end
             end)
+
             local N = Instance.new("TextLabel")
             N.Size = UDim2.new(1, -52, 0, 16)
             N.Position = UDim2.new(0, 48, 0, 8)
@@ -2139,6 +2156,7 @@ function iOS26Glass:CreateWindow(titleText)
             N.TextXAlignment = Enum.TextXAlignment.Left
             N.TextTruncate = Enum.TextTruncate.AtEnd
             N.Parent = ProfileFrame
+
             local U = Instance.new("TextLabel")
             U.Size = UDim2.new(1, -52, 0, 14)
             U.Position = UDim2.new(0, 48, 0, 24)
@@ -2164,11 +2182,13 @@ function iOS26Glass:CreateWindow(titleText)
             BtnFrame.AutoButtonColor = false
             BtnFrame.Parent = TabContent
             Instance.new("UICorner", BtnFrame).CornerRadius = UDim.new(0, 10)
+
             local Stroke = Instance.new("UIStroke")
             Stroke.Thickness = 1.5
             Stroke.Color = Color3.fromRGB(255, 255, 255)
             Stroke.Transparency = 0.6
             Stroke.Parent = BtnFrame
+
             BtnFrame.MouseButton1Click:Connect(function()
                 TweenService:Create(BtnFrame, TweenInfo.new(0.08), { BackgroundTransparency = 0.4 }):Play()
                 task.wait(0.08)
@@ -2185,12 +2205,14 @@ function iOS26Glass:CreateWindow(titleText)
             ToggleFrame.BackgroundTransparency = 0.78
             ToggleFrame.Parent = TabContent
             Instance.new("UICorner", ToggleFrame).CornerRadius = UDim.new(0, 10)
+
             local TStroke = Instance.new("UIStroke")
             TStroke.Thickness = 1.5
             TStroke.Color = Color3.fromRGB(255, 255, 255)
             TStroke.Transparency = 0.5
             TStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
             TStroke.Parent = ToggleFrame
+
             local Label = Instance.new("TextLabel")
             Label.Size = UDim2.new(1, -65, 1, 0)
             Label.Position = UDim2.new(0, 10, 0, 0)
@@ -2201,6 +2223,7 @@ function iOS26Glass:CreateWindow(titleText)
             Label.TextSize = 11.5
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.Parent = ToggleFrame
+
             local SwitchTrack = Instance.new("Frame")
             SwitchTrack.Size = UDim2.new(0, 44, 0, 24)
             SwitchTrack.AnchorPoint = Vector2.new(1, 0.5)
@@ -2209,6 +2232,7 @@ function iOS26Glass:CreateWindow(titleText)
             SwitchTrack.BackgroundTransparency = toggled and 0.25 or 0.6
             SwitchTrack.Parent = ToggleFrame
             Instance.new("UICorner", SwitchTrack).CornerRadius = UDim.new(1, 0)
+
             local Knob = Instance.new("Frame")
             Knob.AnchorPoint = Vector2.new(0.5, 0.5)
             Knob.Size = UDim2.new(0, 18, 0, 18)
@@ -2217,25 +2241,33 @@ function iOS26Glass:CreateWindow(titleText)
             Knob.BackgroundTransparency = 0.15
             Knob.Parent = SwitchTrack
             Instance.new("UICorner", Knob).CornerRadius = UDim.new(1, 0)
+
             local ClickArea = Instance.new("TextButton")
             ClickArea.Size = UDim2.new(1, 0, 1, 0)
             ClickArea.BackgroundTransparency = 1
             ClickArea.Text = ""
             ClickArea.Parent = ToggleFrame
+
             ClickArea.MouseButton1Click:Connect(function()
                 toggled = not toggled
                 local targetPos = toggled and UDim2.new(1, -11, 0.5, 0) or UDim2.new(0, 11, 0.5, 0)
                 local targetBg = toggled and Color3.fromRGB(48, 209, 88) or Color3.fromRGB(220, 220, 225)
                 local targetTrans = toggled and 0.25 or 0.6
+
                 local stretchW, stretchH
-                if toggled then stretchW = 24 stretchH = 14 else stretchW = 20 stretchH = 20 end
-                TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-                    { Size = UDim2.new(0, stretchW, 0, stretchH), Position = targetPos }):Play()
-                TweenService:Create(SwitchTrack, TweenInfo.new(0.25),
-                    { BackgroundColor3 = targetBg, BackgroundTransparency = targetTrans }):Play()
+                if toggled then stretchW = 24 stretchH = 14
+                else stretchW = 20 stretchH = 20 end
+
+                TweenService:Create(Knob, TweenInfo.new(0.14, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, stretchW, 0, stretchH), Position = targetPos
+                }):Play()
+                TweenService:Create(SwitchTrack, TweenInfo.new(0.25), {
+                    BackgroundColor3 = targetBg, BackgroundTransparency = targetTrans
+                }):Play()
                 task.wait(0.12)
-                TweenService:Create(Knob, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out),
-                    { Size = UDim2.new(0, 18, 0, 18) }):Play()
+                TweenService:Create(Knob, TweenInfo.new(0.18, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
+                    Size = UDim2.new(0, 18, 0, 18)
+                }):Play()
                 if callback then callback(toggled) end
             end)
         end
@@ -2249,11 +2281,13 @@ function iOS26Glass:CreateWindow(titleText)
             SliderFrame.BackgroundTransparency = 0.78
             SliderFrame.Parent = TabContent
             Instance.new("UICorner", SliderFrame).CornerRadius = UDim.new(0, 10)
+
             local SStroke = Instance.new("UIStroke")
             SStroke.Thickness = 1
             SStroke.Color = Color3.fromRGB(255, 255, 255)
             SStroke.Transparency = 0.6
             SStroke.Parent = SliderFrame
+
             local Label = Instance.new("TextLabel")
             Label.Size = UDim2.new(1, -60, 0, 16)
             Label.Position = UDim2.new(0, 10, 0, 5)
@@ -2264,6 +2298,7 @@ function iOS26Glass:CreateWindow(titleText)
             Label.TextSize = 11.5
             Label.TextXAlignment = Enum.TextXAlignment.Left
             Label.Parent = SliderFrame
+
             local ValLabel = Instance.new("TextLabel")
             ValLabel.Size = UDim2.new(0, 40, 0, 16)
             ValLabel.Position = UDim2.new(1, -50, 0, 5)
@@ -2274,6 +2309,7 @@ function iOS26Glass:CreateWindow(titleText)
             ValLabel.TextSize = 11.5
             ValLabel.TextXAlignment = Enum.TextXAlignment.Right
             ValLabel.Parent = SliderFrame
+
             local Track = Instance.new("Frame")
             Track.Size = UDim2.new(1, -20, 0, 7)
             Track.Position = UDim2.new(0, 10, 1, -14)
@@ -2281,12 +2317,14 @@ function iOS26Glass:CreateWindow(titleText)
             Track.BackgroundTransparency = 0.65
             Track.Parent = SliderFrame
             Instance.new("UICorner", Track).CornerRadius = UDim.new(1, 0)
+
             local Fill = Instance.new("Frame")
             Fill.Size = UDim2.new((value - min) / (max - min), 0, 1, 0)
             Fill.BackgroundColor3 = Color3.fromRGB(0, 122, 255)
             Fill.BackgroundTransparency = 0.25
             Fill.Parent = Track
             Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
+
             local Thumb = Instance.new("Frame")
             Thumb.AnchorPoint = Vector2.new(0.5, 0.5)
             Thumb.Size = UDim2.new(0, 14, 0, 14)
@@ -2295,6 +2333,7 @@ function iOS26Glass:CreateWindow(titleText)
             Thumb.BackgroundTransparency = 0.15
             Thumb.Parent = Track
             Instance.new("UICorner", Thumb).CornerRadius = UDim.new(1, 0)
+
             local function update(input)
                 local relativeX = math.clamp((input.Position.X - Track.AbsolutePosition.X) / Track.AbsoluteSize.X, 0, 1)
                 local newValue = math.floor(min + (max - min) * relativeX)
@@ -2304,6 +2343,7 @@ function iOS26Glass:CreateWindow(titleText)
                 Thumb.Position = UDim2.new(relativeX, 0, 0.5, 0)
                 if callback then callback(value) end
             end
+
             SliderFrame.InputBegan:Connect(function(input)
                 if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
                     dragging = true
@@ -2379,7 +2419,9 @@ for _, data in ipairs(miniButtonsData) do
             if not state and buttonStates[obj.btn] then
                 buttonStates[obj.btn] = false
                 stopTeleport()
-                TweenService:Create(obj.stroke, TweenInfo.new(0.2), { Color = Color3.fromRGB(255, 255, 255) }):Play()
+                TweenService:Create(obj.stroke, TweenInfo.new(0.2), {
+                    Color = Color3.fromRGB(255, 255, 255)
+                }):Play()
             end
         end
     end)
@@ -2426,6 +2468,7 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
     pcall(function()
         local Workspace = game:GetService("Workspace")
         local Lighting = game:GetService("Lighting")
+
         local function optimize(obj)
             pcall(function()
                 if obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") or obj:IsA("Smoke") or obj:IsA("Fire") or obj:IsA("Sparkles") then
@@ -2448,6 +2491,7 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
                 end
             end)
         end
+
         pcall(function()
             Lighting.GlobalShadows = false
             Lighting.FogEnd = 9e9
@@ -2460,6 +2504,7 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
                 end
             end
         end)
+
         pcall(function()
             local Terrain = Workspace.Terrain
             Terrain.WaterWaveSize = 0
@@ -2467,12 +2512,15 @@ MiscTab:AddButton("Fix Lag / Boost FPS", function()
             Terrain.WaterReflectance = 0
             Terrain.WaterTransparency = 1
         end)
+
         for _, obj in ipairs(game:GetDescendants()) do optimize(obj) end
+
         if not getgenv().FTGS_FixLagConnection then
             getgenv().FTGS_FixLagConnection = game.DescendantAdded:Connect(function(obj)
                 task.defer(function() optimize(obj) end)
             end)
         end
+
         pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
     end)
 end)
@@ -2509,15 +2557,20 @@ local deleteMapLoopThread = nil
 local function runDeleteMapLogic()
     pcall(function()
         if getgenv().DynamicFloorCleanup then getgenv().DynamicFloorCleanup() end
+
         local floorPart, wallLeft, wallRight, wallFolder = nil, nil, nil, nil
         local heartbeatConnection = nil
         local isEnabled = false
+
         local function destroyBuildMap()
             pcall(function()
                 local world = workspace:FindFirstChild("World")
-                if world and world:FindFirstChild("Build") then world.Build:Destroy() end
+                if world and world:FindFirstChild("Build") then
+                    world.Build:Destroy()
+                end
             end)
         end
+
         local function cleanup()
             isEnabled = false
             if heartbeatConnection then heartbeatConnection:Disconnect() heartbeatConnection = nil end
@@ -2527,31 +2580,37 @@ local function runDeleteMapLogic()
             if wallFolder then wallFolder:Destroy() wallFolder = nil end
         end
         getgenv().DynamicFloorCleanup = cleanup
+
         local function enableSystem()
             cleanup()
             isEnabled = true
             destroyBuildMap()
+
             wallFolder = Instance.new("Folder")
             wallFolder.Name = "Dynamic_200Stud_System"
             wallFolder.Parent = workspace
+
             floorPart = Instance.new("Part")
             floorPart.Size = Vector3.new(200, 10, 200)
             floorPart.CanCollide = true
             floorPart.Anchored = true
             floorPart.Transparency = 1
             floorPart.Parent = wallFolder
+
             wallLeft = Instance.new("Part")
             wallLeft.Size = Vector3.new(200, 52, 10)
             wallLeft.CanCollide = true
             wallLeft.Anchored = true
             wallLeft.Transparency = 1
             wallLeft.Parent = wallFolder
+
             wallRight = Instance.new("Part")
             wallRight.Size = Vector3.new(200, 52, 10)
             wallRight.CanCollide = true
             wallRight.Anchored = true
             wallRight.Transparency = 1
             wallRight.Parent = wallFolder
+
             heartbeatConnection = RunService.Heartbeat:Connect(function()
                 pcall(function()
                     local char = LocalPlayer.Character
@@ -2571,6 +2630,7 @@ local function runDeleteMapLogic()
                 end)
             end)
         end
+
         enableSystem()
     end)
 end
@@ -2597,4 +2657,4 @@ MiscTab:AddButton("Server NhiiiX-HopSV", function()
     end)
 end)
 
-print("[DragonNova] Loaded | VIP + BodyPosition Fly 5y/s + Camera Lock")
+print("[DragonNova] Loaded | Full iOS26 UI + Minimize fix")
